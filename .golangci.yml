@@ -1,0 +1,46 @@
+# golangci-lint configuration (schema v2).
+# Placed at the repo root so it applies to every module in the go.work
+# workspace (backend today; services/ and worker/ later).
+version: "2"
+
+run:
+  # Lint test files too.
+  tests: true
+
+linters:
+  # Start from the curated "standard" set (errcheck, govet, ineffassign,
+  # staticcheck, unused) and layer on a few high-value extras below.
+  default: standard
+  enable:
+    - bodyclose    # HTTP/response bodies must be closed — relevant once the
+                   # pharmacy/shipping clients land.
+    - errorlint    # correct error wrapping/comparison (%w, errors.Is/As).
+    - gocritic     # broad set of style/correctness/performance checks.
+    - gosec        # security issues — worth having in an auth/crypto app.
+    - misspell     # catches typos in comments/strings.
+    - revive       # configurable style linter (golint's successor).
+    - unconvert    # flags redundant type conversions.
+    - unparam      # unused function parameters/results.
+  exclusions:
+    # Skip generated code (Ent's ent/ client, etc.) — "lax" matches the
+    # standard "// Code generated ... DO NOT EDIT." header.
+    generated: lax
+    rules:
+      # Security/style checks that produce noise in tests, relaxed there.
+      - path: _test\.go
+        linters:
+          - gosec
+          - unparam
+
+formatters:
+  # Formatting is handled as a separate concern in v2. Enabling these lets
+  # `golangci-lint fmt` (and editors) apply them, and flags unformatted code.
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      # Group project imports into their own block, separate from stdlib and
+      # third-party — keeps the hexagonal layering visible at a glance.
+      local-prefixes:
+        - github.com/LoneWolfPR/MedMarket/backend

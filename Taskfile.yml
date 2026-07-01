@@ -1,0 +1,31 @@
+# Root task runner (https://taskfile.dev). Run `task` (or `task --list`) to see
+# everything available. Per-module tasks live in their own Taskfiles and are
+# pulled in under a namespace via `includes` below (e.g. `task backend:lint`).
+version: '3'
+
+includes:
+  backend:
+    taskfile: ./backend/Taskfile.yml
+    dir: ./backend
+
+tasks:
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  up:
+    desc: Start the full local stack (builds images)
+    cmds:
+      - docker compose up --build
+
+  down:
+    desc: Stop the local stack
+    cmds:
+      - docker compose down
+
+  logs:
+    desc: Tail logs from the running stack
+    cmds:
+      - docker compose logs -f

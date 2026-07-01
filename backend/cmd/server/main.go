@@ -1,3 +1,4 @@
+// Command server runs the MedMarket backend HTTP API.
 package main
 
 import (
@@ -5,15 +6,27 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", healthHandler)
 
-	addr := ":" + port()
-	log.Printf("backend listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	// Explicit timeouts guard against slow-client attacks (e.g. Slowloris);
+	// the bare http.ListenAndServe uses a zero-value server with none, which
+	// is what gosec flags (G114).
+	srv := &http.Server{
+		Addr:              ":" + port(),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	log.Printf("backend listening on %s", srv.Addr)
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }

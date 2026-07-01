@@ -202,28 +202,28 @@ All inter-service communication happens over a shared Docker network. Backend re
 
 ### Day 2 — Database Layer + Hexagonal Architecture Skeleton
 
-**Goal:** Ent schemas defined, Atlas migrations running, and the hexagonal architecture directory structure established with a working user registration endpoint.
+**Goal:** Deliver the `user` domain as a full **vertical slice** — domain → ports → Ent/Postgres adapter → HTTP → JWT — to validate the hexagonal wiring end-to-end and reach a working registration/login endpoint. The `prescription`, `order`, and `pharmacy` domains are **deferred to the days their features land** (Days 3–6), so we don't model them before we understand their flows (avoids premature modeling — `Order` in particular gets reshaped by the Day 6 saga work). Each deferred domain has an explicit task on its day (see Days 3, 4, 6).
 
 **Skills targeted:** Hexagonal architecture (1→2), Atlas migrations (2→3)
 
 **Tasks:**
 
 1. Set up the hexagonal architecture directory structure under `backend/internal/` — `domain/`, `ports/inbound/`, `ports/outbound/`, `adapters/inbound/http/`, `adapters/outbound/postgres/`, `app/`
-2. Define domain types first (these are plain Go structs with no dependencies):
-   - `domain/user/user.go` — User entity, value objects for email, password hash
-   - `domain/prescription/prescription.go` — Prescription entity
-   - `domain/order/order.go` — Order entity, OrderStatus enum
-   - `domain/pharmacy/pharmacy.go` — Pharmacy entity, PriceQuote value object
+   - **Project tooling:** add a root `Taskfile.yml` (go-task) that consolidates common commands, with per-module Taskfiles pulled in via `includes` (e.g. `task up`, `task backend:lint`). Grow it with `generate` and `migrate:*` targets as Ent/Atlas land.
+2. Define the `user` domain types (plain Go structs, no adapter dependencies):
+   - `domain/user/` — User entity; value objects for email + password hash (each with a validating constructor + `IsZero`); `NewUser` constructor enforcing entity invariants
+   - `domain/shared/` — cross-cutting value objects (e.g. Address)
+   - Other domains (`prescription`, `order`, `pharmacy`) are deferred to their feature days (Day 3+) — see Goal
 3. Define outbound port interfaces:
    - `ports/outbound/user_repository.go` — `Create`, `GetByID`, `GetByEmail`
    - Keep other repository interfaces as stubs for now
 4. Define inbound port interfaces:
    - `ports/inbound/user_service.go` — `Register`, `Login`, `GetProfile`
-5. Create Ent schemas (`ent/schema/`): User, Prescription, Order, Pharmacy, OrderItem
+5. Create the Ent schema for `User` only (`ent/schema/`); other entities are added on their feature days
    - Run `go generate ./ent` to generate the Ent client code
-6. Create the first Atlas migration: `atlas migrate diff init --env local`
+6. Create the first Atlas migration (`atlas migrate diff init --env local`) — just the `users` table for now; later domains get their own migrations as they land
    - Configure Atlas to diff against your Ent schema
-   - Apply the migration to your Dockerized Postgres
+   - Apply the migration to your Dockerized Postgres (host `localhost:5433` — remapped from 5432 to avoid the local Postgres clash)
 7. Implement the Postgres adapter for the user repository using Ent
 8. Implement the application service for user registration (hash password with bcrypt, call repository)
 9. Wire up the HTTP adapter: `POST /api/auth/register` and `POST /api/auth/login` returning a JWT
@@ -263,7 +263,7 @@ All inter-service communication happens over a shared Docker network. Backend re
    - `GET /api/status/:trackingId` returns current status
 4. Write Dockerfiles for all three services
 5. Add all three to `docker-compose.yml` with Traefik labels (these don't need external routing — they're only accessed by the backend over the Docker network, but routing them through Traefik lets you inspect them during development)
-6. Define the outbound port interfaces in your backend: `PharmacyClient` interface, `ShippingClient` interface
+6. Define the `pharmacy` domain in the backend (Pharmacy entity, `PriceQuote` value object — **deferred from Day 2**), then define the outbound port interfaces: `PharmacyClient` (its methods return `PriceQuote`), `ShippingClient`
 7. Test each mock service independently with curl to verify behavior
 
 **Key concepts to understand:**
@@ -295,6 +295,7 @@ All inter-service communication happens over a shared Docker network. Backend re
    - `Send(ctx, to, subject, htmlBody) error`
 5. Implement the SMTP adapter for `EmailSender` (standard Go `net/smtp` package, pointed at Mailpit)
 6. Build the prescription upload flow:
+   - First define the `prescription` domain (Prescription entity — **deferred from Day 2**)
    - `POST /api/prescriptions/upload` — multipart form upload, protected by JWT middleware
    - Application service validates the file type (images and PDFs only), uploads to MinIO, creates a Prescription record in Postgres with the storage key
    - `GET /api/prescriptions` — lists user's prescriptions with presigned download URLs
@@ -362,7 +363,7 @@ All inter-service communication happens over a shared Docker network. Backend re
    - Compensation: if step 3 fails → refund payment (mock), update order to `failed`. If step 4 fails → cancel pharmacy order, refund payment, update order to `failed`
 2. Implement each step as a Temporal activity
 3. Implement the saga workflow with compensation logic
-4. Add order-related Ent schemas and Atlas migration (Order, OrderItem with relations to User, Prescription, selected pharmacy)
+4. Define the `order` domain (Order entity, `OrderStatus` enum, OrderItem — **deferred from Day 2**), then add order-related Ent schemas and Atlas migration (Order, OrderItem with relations to User, Prescription, selected pharmacy)
 5. Build the API endpoints:
    - `POST /api/orders` — accepts prescription ID, selected pharmacy quote, payment token; starts the order workflow
    - `GET /api/orders` — list user's orders
