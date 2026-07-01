@@ -1,0 +1,73 @@
+name: medmarket
+
+services:
+  traefik:
+    image: traefik:v3.6
+    command:
+      # Dashboard on :8080 (insecure mode is fine for local dev only).
+      - "--api.insecure=true"
+      # Auto-discover services from Docker labels; require explicit opt-in.
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080" # Traefik dashboard — http://localhost:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - medmarket
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      - PORT=8080
+    labels:
+      - "traefik.enable=true"
+      # PathPrefix(/api) is longer than the frontend's PathPrefix(/), so Traefik
+      # gives it higher priority automatically — /api/* routes here.
+      - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.entrypoints=web"
+      - "traefik.http.services.backend.loadbalancer.server.port=8080"
+    depends_on:
+      - postgres
+    networks:
+      - medmarket
+
+  frontend:
+    build:
+      context: ./frontend
+    volumes:
+      # Bind-mount source for HMR; keep node_modules in a container-owned volume.
+      - ./frontend:/app
+      - /app/node_modules
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.services.frontend.loadbalancer.server.port=5173"
+    networks:
+      - medmarket
+
+  postgres:
+    image: postgres:17
+    environment:
+      - POSTGRES_USER=medmarket
+      - POSTGRES_PASSWORD=medmarket
+      - POSTGRES_DB=medmarket
+    ports:
+      # Host 5433 → container 5432 to avoid clashing with a local Postgres on
+      # 5432. Point local tooling (e.g. Atlas on Day 2) at localhost:5433.
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - medmarket
+
+volumes:
+  postgres-data:
+
+networks:
+  medmarket:
+    driver: bridge

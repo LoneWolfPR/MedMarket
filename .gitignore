@@ -1,0 +1,21 @@
+# Go
+/backend/server
+*.exe
+*.test
+*.out
+
+# Env / secrets
+.env
+.env.local
+*.local
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Tooling
+.claude/settings.local.json
