@@ -3,12 +3,16 @@ package inbound
 
 import (
 	"context"
+	"errors"
 
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
 
 	"github.com/google/uuid"
 )
+
+//nolint:revive // sentinal errors are self-documenting
+var ErrInvalidCredentials = errors.New("invalid credentials")
 
 // RegisterInput includes the raw values for creating a new user
 type RegisterInput struct {

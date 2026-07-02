@@ -21,8 +21,8 @@ This plan is structured as a 14-day daily project designed to build software arc
 | `temporal` | Temporal server (workflow orchestration) |
 | `temporal-db` | Postgres instance dedicated to Temporal |
 | `temporal-ui` | Temporal's web UI for workflow visibility |
-| `mock-pharmacy-a` | Mock pharmacy API (different pricing/latency behavior) |
-| `mock-pharmacy-b` | Mock pharmacy API (different catalog/error behavior) |
+| `mock-pharmacy-a` | Mock pharmacy API — its own API shape, pricing/latency behavior |
+| `mock-pharmacy-b` | Mock pharmacy API — a deliberately *different* API shape, catalog/error behavior |
 | `mock-shipping` | Mock shipping service with webhook callbacks |
 | `minio` | S3-compatible object storage for prescription uploads |
 | `mailpit` | Local email capture with web UI |
@@ -252,7 +252,8 @@ All inter-service communication happens over a shared Docker network. Backend re
    - `POST /api/order` accepts an order, returns a confirmation with a tracking ID
    - Has a fixed catalog of ~15-20 common medications with randomized pricing within realistic ranges
    - Simulates occasional errors (~5% of requests return 500)
-2. Build `mock-pharmacy-b` — same API contract but different behavior:
+2. Build `mock-pharmacy-b` — a **deliberately different API shape** (different endpoint paths, request/response JSON structure, field names, quote format) *and* different behavior. Real pharmacies don't share a contract; each backend adapter's job is to translate its pharmacy's API into the standard `PharmacyClient` port, and the mocks must differ enough to make that translation real:
+   - Different API structure from `mock-pharmacy-a` (this is the point — not a shared contract)
    - Different pricing ranges (sometimes cheaper, sometimes more expensive)
    - Different latency profile (100-300ms)
    - Different error rate (~10%)
@@ -263,11 +264,11 @@ All inter-service communication happens over a shared Docker network. Backend re
    - `GET /api/status/:trackingId` returns current status
 4. Write Dockerfiles for all three services
 5. Add all three to `docker-compose.yml` with Traefik labels (these don't need external routing — they're only accessed by the backend over the Docker network, but routing them through Traefik lets you inspect them during development)
-6. Define the `pharmacy` domain in the backend (Pharmacy entity, `PriceQuote` value object — **deferred from Day 2**), then define the outbound port interfaces: `PharmacyClient` (its methods return `PriceQuote`), `ShippingClient`
+6. Define the `pharmacy` domain in the backend (Pharmacy entity, `PriceQuote` value object — **deferred from Day 2**), then define the **single** outbound port interfaces: `PharmacyClient` (its methods return `PriceQuote`), `ShippingClient`. One port; each pharmacy gets its own adapter (Day 4) that maps its distinct API onto this port.
 7. Test each mock service independently with curl to verify behavior
 
 **Key concepts to understand:**
-- API contract consistency — both pharmacy mocks implement the same interface, which is exactly what your backend's port interface will abstract
+- Adapters absorb API differences — the two pharmacy mocks expose *different* APIs on purpose; the single `PharmacyClient` port is what lets the service stay pharmacy-agnostic while a per-pharmacy adapter translates each upstream shape. This is the core hexagonal payoff.
 - Why mock services should simulate real-world failure modes (timeouts, errors, partial data) rather than always returning happy-path responses
 - Docker Compose service discovery — your backend will call `http://mock-pharmacy-a:8080` and `http://mock-pharmacy-b:8080`
 
@@ -330,7 +331,7 @@ All inter-service communication happens over a shared Docker network. Backend re
    - Activities: `SearchPharmacy` — calls a single pharmacy adapter and returns a quote (or error)
    - Workflow logic: fan out `SearchPharmacy` activities to all registered pharmacies concurrently, collect results with a timeout (e.g., 5 seconds — if a pharmacy doesn't respond, proceed without it), sort by price, return aggregated results
    - Handle partial failures gracefully — if one pharmacy errors, still return results from the others
-4. Implement the pharmacy adapter for the backend — HTTP clients that call the mock pharmacy services, implementing the `PharmacyClient` outbound port
+4. Implement **one pharmacy adapter per mock** for the backend — a separate HTTP client for pharmacy-a and pharmacy-b, each translating its pharmacy's distinct API into the standard `PharmacyClient` outbound port
 5. Build the Temporal worker: registers workflows and activities, connects to Temporal server
 6. Add the worker as a container in `docker-compose.yml`
 7. Wire up the API endpoint: `POST /api/prescriptions/:id/search` triggers the workflow, returns a workflow ID. `GET /api/prescriptions/:id/search/:workflowId` polls for results (or use a simple synchronous wait with timeout for now)

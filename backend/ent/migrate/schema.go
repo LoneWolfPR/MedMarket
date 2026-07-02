@@ -21,6 +21,8 @@ var (
 		{Name: "address_city", Type: field.TypeString, Nullable: true},
 		{Name: "address_state", Type: field.TypeString, Nullable: true},
 		{Name: "address_zip", Type: field.TypeString, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{

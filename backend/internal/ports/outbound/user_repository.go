@@ -13,6 +13,7 @@ import (
 //nolint:revive // Sentinel errors are self documenting
 var (
 	ErrUserNotFound = errors.New("user not found")
+	ErrEmailTaken   = errors.New("that email address is already in use")
 )
 
 // UserRepository declares all the methods an adapter needs to implement

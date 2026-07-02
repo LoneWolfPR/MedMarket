@@ -2,6 +2,8 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/field"
@@ -46,6 +48,18 @@ func (User) Fields() []ent.Field {
 			Optional(),
 		field.String("address_zip").
 			Optional(),
+		// Timestamps. Client-side defaults mirrored with DB-level defaults so
+		// direct SQL inserts populate them too. See ent-db-defaults memory.
+		// Note: Postgres has no ON UPDATE, so updated_at's refresh on modify is
+		// handled app-side by UpdateDefault; the DB default only covers inserts.
+		field.Time("created_at").
+			Default(time.Now).
+			Immutable().
+			Annotations(entsql.DefaultExpr("CURRENT_TIMESTAMP")),
+		field.Time("updated_at").
+			Default(time.Now).
+			UpdateDefault(time.Now).
+			Annotations(entsql.DefaultExpr("CURRENT_TIMESTAMP")),
 	}
 }
 
