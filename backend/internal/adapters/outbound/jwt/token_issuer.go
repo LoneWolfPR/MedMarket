@@ -69,3 +69,33 @@ func (i *TokenIssuer) Issue(userID uuid.UUID) (string, error) {
 	}
 	return signedToken, nil
 }
+
+// Verify takes a signed JWT and verifies it, returning the user ID if valid
+func (i *TokenIssuer) Verify(token string) (uuid.UUID, error) {
+	parsedToken, err := jwt.ParseWithClaims(token, &jwt.RegisteredClaims{}, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return i.secret, nil
+	})
+
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("error parsing token: %w", err)
+	}
+
+	if !parsedToken.Valid {
+		return uuid.Nil, errors.New("invalid token")
+	}
+
+	claims, ok := parsedToken.Claims.(*jwt.RegisteredClaims)
+	if !ok {
+		return uuid.Nil, errors.New("error extracting claims")
+	}
+
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("error parsing user ID: %w", err)
+	}
+
+	return userID, nil
+}

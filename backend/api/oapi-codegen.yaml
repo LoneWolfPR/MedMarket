@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
+#
+# oapi-codegen config for the backend HTTP API. Emits models + a strict
+# server interface + the std-lib net/http router into a single generated
+# file in its own `openapi` package (kept apart from hand-written handlers
+# so regeneration never clobbers them). Output path is relative to this
+# file's directory (backend/api).
+package: openapi
+output: ../internal/adapters/inbound/http/openapi/openapi.gen.go
+generate:
+  models: true
+  strict-server: true
+  std-http-server: true
+  embedded-spec: true

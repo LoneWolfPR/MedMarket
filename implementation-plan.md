@@ -226,14 +226,15 @@ All inter-service communication happens over a shared Docker network. Backend re
    - Apply the migration to your Dockerized Postgres (host `localhost:5433` — remapped from 5432 to avoid the local Postgres clash)
 7. Implement the Postgres adapter for the user repository using Ent
 8. Implement the application service for user registration (hash password with bcrypt, call repository)
-9. Wire up the HTTP adapter: `POST /api/auth/register` and `POST /api/auth/login` returning a JWT
-10. Add JWT middleware that validates tokens and injects user info into the request context
+9. Wire up the HTTP adapter **spec-first with OpenAPI**: define routes/schemas in `backend/api/api.yaml`, generate models + a strict server interface with `oapi-codegen` (`task backend:generate-api`), then implement the generated `StrictServerInterface` in the `AuthHandler` — `POST /api/auth/register`, `POST /api/auth/login` (returns a JWT), `GET /api/auth/profile`. Generated code lives in its own `internal/adapters/inbound/http/openapi` package; hand-written handlers map generated DTOs ↔ domain and map domain/service errors to the typed response objects (no route wiring by hand).
+10. Add JWT middleware that validates tokens and injects user info into the request context — modeled as the `bearerAuth` security scheme in the spec and implemented as a `StrictMiddlewareFunc`; requires a `Verify` method on the `TokenIssuer` outbound port.
 
 **Key concepts to understand:**
 - Why interfaces are defined in `ports/` and implementations live in `adapters/` — the domain dictates what it needs, adapters fulfill it
 - Dependency injection: the `main.go` wires everything together, creating adapters and passing them to application services
 - Ent's code generation model — schemas define the graph, `go generate` creates the typed client
 - Atlas declarative migrations vs. Ent's built-in auto-migration (Atlas gives you version-controlled, reviewable migration files)
+- Spec-first HTTP: the OpenAPI `api.yaml` is the source of truth; routes/types/server interface are generated (like Ent/Atlas), handlers only supply the business logic — DTO↔domain mapping and error→response-type decisions
 
 **Checkpoint:** You can register a user via `curl -X POST localhost/api/auth/register`, log in to get a JWT, and hit a protected `/api/auth/profile` endpoint with the token.
 
@@ -415,7 +416,7 @@ All inter-service communication happens over a shared Docker network. Backend re
    - Test the order saga with simulated failures at each step
 6. Set up `golangci-lint` configuration (`.golangci.yml`) — enable useful linters beyond the defaults: `errcheck`, `govet`, `staticcheck`, `unused`, `gosimple`, `ineffassign`, plus style linters like `gofmt`, `goimports`
 7. Fix any linting issues across the codebase
-8. Document the API — add an OpenAPI spec or at minimum a README documenting all endpoints, request/response shapes, and auth requirements
+8. Document the API — the OpenAPI spec (`backend/api/api.yaml`, spec-first since Day 2) is the source of truth; ensure every endpoint added since is defined there, and optionally serve it (Swagger UI / Redoc) or export it for consumers
 
 **Checkpoint:** Shipping flow works end-to-end — place order, watch shipping status progress through webhook callbacks, see status emails in Mailpit, verify final delivery status. All tests pass, linter is clean.
 

@@ -37,6 +37,11 @@ tasks:
     cmds:
       - go generate ./ent
 
+  generate-api:
+    desc: Regenerate HTTP models + strict server from the OpenAPI spec (api/api.yaml)
+    cmds:
+      - go generate ./api/...
+
   migrate-diff:
     desc: 'Generate a migration from the Ent schema diff. Usage: task backend:migrate-diff -- <name>'
     # GOWORK=off for the same reason as generate — Atlas's ent:// loader.
