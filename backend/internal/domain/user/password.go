@@ -23,8 +23,12 @@ const (
 //nolint:revive // sentinal errors are self-documenting
 var (
 	ErrInvalidPasswordLength = errors.New("invalid password length: must be 8-32 characters")
-	ErrInvalidCharacter      = fmt.Errorf("invalid character in password only letters, numbers, and %s are allowed", AllowedSpecialChars)
-	ErrInvalidPassword       = fmt.Errorf("invalid password: it must be 8-32 characters and contain an upper and lower case letter, a number, and a special character")
+	ErrInvalidCharacter      = fmt.Errorf(
+		"invalid character in password only letters, numbers, and %s are allowed",
+		AllowedSpecialChars)
+	ErrInvalidPassword = fmt.Errorf(
+		"invalid password: it must be 8-32 characters and contain an upper " +
+			"and lower case letter, a number, and a special character")
 )
 
 // NewPassword is the constructor for creating and validating a new password

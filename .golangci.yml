@@ -17,10 +17,17 @@ linters:
     - errorlint    # correct error wrapping/comparison (%w, errors.Is/As).
     - gocritic     # broad set of style/correctness/performance checks.
     - gosec        # security issues — worth having in an auth/crypto app.
+    - lll          # enforces a maximum line length (see settings below).
     - misspell     # catches typos in comments/strings.
     - revive       # configurable style linter (golint's successor).
     - unconvert    # flags redundant type conversions.
     - unparam      # unused function parameters/results.
+  settings:
+    lll:
+      # Max line length. Tabs count as 4 columns so the limit matches what
+      # you see with a 4-wide tab (Go indents with tabs).
+      line-length: 120
+      tab-width: 4
   exclusions:
     # Skip generated code (Ent's ent/ client, etc.) — "lax" matches the
     # standard "// Code generated ... DO NOT EDIT." header.

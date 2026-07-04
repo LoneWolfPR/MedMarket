@@ -11,8 +11,17 @@ import (
 	"github.com/google/uuid"
 )
 
-//nolint:revive // sentinal errors are self-documenting
-var ErrInvalidCredentials = errors.New("invalid credentials")
+// Sentinel errors returned by UserService for the inbound adapters to map
+// onto transport-level responses (e.g. HTTP status codes). The service
+// normalizes domain and outbound errors into these so driving adapters never
+// depend on domain/outbound error identities.
+//
+//nolint:revive // sentinel errors are self-documenting
+var (
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrValidation         = errors.New("validation failed")
+	ErrEmailTaken         = errors.New("email already in use")
+)
 
 // RegisterInput includes the raw values for creating a new user
 type RegisterInput struct {

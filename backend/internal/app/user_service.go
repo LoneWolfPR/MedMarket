@@ -65,11 +65,11 @@ func NewUserService(p NewUserServiceParams) (*UserService, error) {
 func (s *UserService) Register(ctx context.Context, input inbound.RegisterInput) (*user.User, error) {
 	emailAddress, err := user.NewEmail(input.Email)
 	if err != nil {
-		return nil, fmt.Errorf("error with supplied email: %w", err)
+		return nil, fmt.Errorf("%w: %w", inbound.ErrValidation, err)
 	}
 	password, err := user.NewPassword(input.Password)
 	if err != nil {
-		return nil, fmt.Errorf("error with supplied password: %w", err)
+		return nil, fmt.Errorf("%w: %w", inbound.ErrValidation, err)
 	}
 	passwordHashString, err := s.passwordHasher.Hash(password.String())
 	if err != nil {
@@ -88,9 +88,16 @@ func (s *UserService) Register(ctx context.Context, input inbound.RegisterInput)
 		Address:      input.Address,
 	})
 	if err != nil {
+		return nil, fmt.Errorf("%w: %w", inbound.ErrValidation, err)
+	}
+	createdUser, err := s.userRepository.Create(ctx, newUser)
+	if err != nil {
+		if errors.Is(err, outbound.ErrEmailTaken) {
+			return nil, fmt.Errorf("%w: %w", inbound.ErrEmailTaken, err)
+		}
 		return nil, fmt.Errorf("error creating user: %w", err)
 	}
-	return s.userRepository.Create(ctx, newUser)
+	return createdUser, nil
 }
 
 // Login takes a provided email and password, fetches a profile by email, and validates the
@@ -98,7 +105,7 @@ func (s *UserService) Register(ctx context.Context, input inbound.RegisterInput)
 func (s *UserService) Login(ctx context.Context, email, password string) (string, error) {
 	userEmail, err := user.NewEmail(email)
 	if err != nil {
-		return "", fmt.Errorf("error processing email address: %w", err)
+		return "", inbound.ErrInvalidCredentials
 	}
 	userProfile, err := s.userRepository.GetByEmail(ctx, userEmail)
 	if err != nil {
@@ -125,6 +132,9 @@ func (s *UserService) Login(ctx context.Context, email, password string) (string
 func (s *UserService) GetProfile(ctx context.Context, id uuid.UUID) (*user.User, error) {
 	profile, err := s.userRepository.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, outbound.ErrUserNotFound) {
+			return nil, fmt.Errorf("%w: %w", inbound.ErrInvalidCredentials, err)
+		}
 		return nil, fmt.Errorf("error fetching user profile: %w", err)
 	}
 	return profile, nil

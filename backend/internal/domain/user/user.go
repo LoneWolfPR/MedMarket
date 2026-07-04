@@ -22,7 +22,6 @@ var (
 type User struct {
 	ID           uuid.UUID
 	Email        Email
-	Password     Password
 	PasswordHash PasswordHash
 	FirstName    string
 	LastName     string
@@ -34,7 +33,6 @@ type User struct {
 // a new instance of a user
 type NewUserParams struct {
 	Email        Email
-	Password     Password
 	PasswordHash PasswordHash
 	FirstName    string
 	LastName     string
@@ -64,7 +62,6 @@ func NewUser(p NewUserParams) (*User, error) {
 
 	newUser := User{
 		Email:        p.Email,
-		Password:     p.Password,
 		PasswordHash: p.PasswordHash,
 		FirstName:    trimmedFirstName,
 		LastName:     trimmedLastName,
