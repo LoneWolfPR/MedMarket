@@ -56,8 +56,9 @@ tasks:
       - atlas migrate apply --env local
 
   check:
-    desc: Build, vet, and lint in one shot
+    desc: Build, vet, test, and lint in one shot
     cmds:
       - task: build
       - task: vet
+      - task: test
       - task: lint

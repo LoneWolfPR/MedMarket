@@ -7,6 +7,7 @@ import (
 
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http/openapi"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/inbound"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/ptr"
 )
 
 // AuthHandler is the adapter for processing all auth calls
@@ -45,6 +46,7 @@ func (h *AuthHandler) RegisterUser(
 		LastName:  req.Body.LastName,
 		Email:     string(req.Body.Email),
 		Password:  req.Body.Password,
+		Phone:     ptr.Deref(req.Body.Phone),
 		Address:   MapToSharedAddress(req.Body.Address),
 	}
 
