@@ -15,6 +15,8 @@ type AuthHandler struct {
 	svc    inbound.UserService
 }
 
+var _ openapi.StrictServerInterface = (*AuthHandler)(nil)
+
 // NewAuthHandlerParams is the object holding needed params
 type NewAuthHandlerParams struct {
 	Logger *slog.Logger

@@ -23,6 +23,11 @@ services:
       context: ./backend
     environment:
       - PORT=8080
+      # In-container DB host is the compose service name on 5432 — NOT host 5433.
+      - DATABASE_URL=postgres://medmarket:medmarket@postgres:5432/medmarket?sslmode=disable
+      # Local-dev only. Real secrets come from the platform on GKE.
+      - JWT_SECRET=local-dev-insecure-secret-change-me
+      - JWT_TTL=24h
     labels:
       - "traefik.enable=true"
       # PathPrefix(/api) is longer than the frontend's PathPrefix(/), so Traefik
@@ -31,7 +36,10 @@ services:
       - "traefik.http.routers.backend.entrypoints=web"
       - "traefik.http.services.backend.loadbalancer.server.port=8080"
     depends_on:
-      - postgres
+      # Wait until Postgres is actually accepting connections, not just started —
+      # main.go pings with a fail-fast 5s timeout and exits on refusal.
+      postgres:
+        condition: service_healthy
     networks:
       - medmarket
 
@@ -56,6 +64,12 @@ services:
       - POSTGRES_USER=medmarket
       - POSTGRES_PASSWORD=medmarket
       - POSTGRES_DB=medmarket
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medmarket -d medmarket"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     ports:
       # Host 5433 → container 5432 to avoid clashing with a local Postgres on
       # 5432. Point local tooling (e.g. Atlas on Day 2) at localhost:5433.

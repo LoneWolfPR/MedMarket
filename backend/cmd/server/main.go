@@ -12,8 +12,9 @@ import (
 	"time"
 
 	"github.com/LoneWolfPR/MedMarket/backend/ent"
-	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/bcrypt"
 	httpapi "github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http/openapi"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/bcrypt"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/jwt"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/postgres"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/app"
@@ -102,6 +103,7 @@ func run() error {
 	// Outbound adapters
 	repo, err := postgres.NewUserRepository(postgres.NewUserRepositoryParams{
 		Client: client,
+		Logger: logger,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to set up user repository: %w", err)
@@ -117,18 +119,18 @@ func run() error {
 	tokenIssuer, err := jwt.NewTokenIssuer(jwt.NewTokenIssuerParams{
 		Logger: logger,
 		Secret: cfg.JWTSecret,
-		TTL: cfg.JWTTTL,
+		TTL:    cfg.JWTTTL,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to set up token issuer: %w", err)
 	}
 
-	//Application Services
+	// Application Services
 	userService, err := app.NewUserService(app.NewUserServiceParams{
-		Logger: logger,
+		Logger:         logger,
 		UserRepository: repo,
 		PasswordHasher: hasher,
-		TokenIssuer: tokenIssuer,
+		TokenIssuer:    tokenIssuer,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to set up user service: %w", err)
@@ -137,14 +139,17 @@ func run() error {
 	// Inbound Adapters
 	authHandler, err := httpapi.NewAuthHandler(httpapi.NewAuthHandlerParams{
 		Logger: logger,
-		Svc: userService,
+		Svc:    userService,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to setup auth handler: %w", err)
 	}
 
+	api := httpapi.NewAPI(authHandler, tokenIssuer)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", healthHandler)
+	openapi.HandlerFromMux(api, mux)
 
 	// Explicit timeouts guard against slow-client attacks (e.g. Slowloris);
 	// the bare http.ListenAndServe uses a zero-value server with none, which

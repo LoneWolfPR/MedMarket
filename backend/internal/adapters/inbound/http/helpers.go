@@ -9,6 +9,10 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+const (
+	msgInternalServerError = "internal server error"
+)
+
 // toUserResponse maps a domain user onto the OpenAPI UserResponse DTO, applying
 // the optional-field conventions (empty phone / zero address are omitted).
 // Shared by the register and profile handlers, whose success responses are both
