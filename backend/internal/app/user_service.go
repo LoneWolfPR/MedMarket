@@ -79,12 +79,16 @@ func (s *UserService) Register(ctx context.Context, input inbound.RegisterInput)
 	if err != nil {
 		return nil, fmt.Errorf("error in the password hash: %w", err)
 	}
+	phoneNumber, err := user.NewPhone(input.Phone)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", inbound.ErrValidation, err)
+	}
 	newUser, err := user.NewUser(user.NewUserParams{
 		FirstName:    input.FirstName,
 		LastName:     input.LastName,
 		Email:        emailAddress,
 		PasswordHash: passwordHash,
-		Phone:        input.Phone,
+		Phone:        phoneNumber,
 		Address:      input.Address,
 	})
 	if err != nil {

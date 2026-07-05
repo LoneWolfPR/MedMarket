@@ -61,12 +61,14 @@ func makeUser(t *testing.T) *user.User {
 	require.NoError(t, err)
 	h, err := user.NewPasswordHash(validHash)
 	require.NoError(t, err)
+	p, err := user.NewPhone("5551234567")
+	require.NoError(t, err)
 	u, err := user.NewUser(user.NewUserParams{
 		Email:        e,
 		PasswordHash: h,
 		FirstName:    "Jane",
 		LastName:     "Doe",
-		Phone:        "5551234567",
+		Phone:        p,
 		Address:      shared.Address{Street1: "1 Main St", City: "Anytown", State: "CA", Zip: "90001"},
 	})
 	require.NoError(t, err)

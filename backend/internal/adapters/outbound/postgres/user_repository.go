@@ -54,7 +54,7 @@ func (r *UserRepository) Create(ctx context.Context, u *user.User) (*user.User, 
 		SetLastName(u.LastName).
 		SetEmail(u.Email.String()).
 		SetPasswordHash(u.PasswordHash.String()).
-		SetPhone(u.Phone).
+		SetPhone(u.Phone.String()).
 		SetAddressStreet1(u.Address.Street1).
 		SetAddressStreet2(u.Address.Street2).
 		SetAddressCity(u.Address.City).
@@ -114,13 +114,17 @@ func mapToDomainUser(userRecord *ent.User) (*user.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error with passwordhash on file: %w", err)
 	}
+	userPhone, err := user.NewPhone(userRecord.Phone)
+	if err != nil {
+		return nil, fmt.Errorf("error with the phone on file: %w", err)
+	}
 	domainUser := &user.User{
 		ID:           userRecord.ID,
 		FirstName:    userRecord.FirstName,
 		LastName:     userRecord.LastName,
 		Email:        userEmail,
 		PasswordHash: userPasswordHash,
-		Phone:        userRecord.Phone,
+		Phone:        userPhone,
 		Address: shared.Address{
 			Street1: userRecord.AddressStreet1,
 			Street2: userRecord.AddressStreet2,

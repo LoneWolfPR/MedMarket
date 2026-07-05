@@ -25,8 +25,8 @@ func toUserResponse(u *user.User) openapi.UserResponse {
 		LastName:  u.LastName,
 		Address:   MapToOAPIAddress(u.Address),
 	}
-	if u.Phone != "" {
-		resp.Phone = ptr.To(u.Phone)
+	if !u.Phone.IsZero() {
+		resp.Phone = ptr.To(u.Phone.String())
 	}
 	return resp
 }

@@ -76,12 +76,14 @@ func newDomainUser(t *testing.T, email string) *user.User {
 	require.NoError(t, err)
 	h, err := user.NewPasswordHash(validHash)
 	require.NoError(t, err)
+	p, err := user.NewPhone("5551234567")
+	require.NoError(t, err)
 	u, err := user.NewUser(user.NewUserParams{
 		Email:        e,
 		PasswordHash: h,
 		FirstName:    "Jane",
 		LastName:     "Doe",
-		Phone:        "5551234567",
+		Phone:        p,
 		Address:      shared.Address{Street1: "1 Main St", City: "Anytown", State: "CA", Zip: "90001"},
 	})
 	require.NoError(t, err)
@@ -104,7 +106,7 @@ func TestUserRepository(t *testing.T) {
 		assert.Equal(t, "Jane", got.FirstName)
 		assert.Equal(t, "Doe", got.LastName)
 		assert.Equal(t, validHash, got.PasswordHash.String())
-		assert.Equal(t, "5551234567", got.Phone)
+		assert.Equal(t, "5551234567", got.Phone.String())
 		assert.Equal(t, shared.Address{Street1: "1 Main St", City: "Anytown", State: "CA", Zip: "90001"}, got.Address)
 	})
 
@@ -160,7 +162,7 @@ func TestUserRepository(t *testing.T) {
 
 		got, err := repo.GetByID(ctx, created.ID)
 		require.NoError(t, err)
-		assert.Empty(t, got.Phone)
+		assert.True(t, got.Phone.IsZero())
 		assert.Equal(t, shared.Address{}, got.Address)
 	})
 }
