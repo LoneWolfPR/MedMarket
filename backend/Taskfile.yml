@@ -15,13 +15,20 @@ tasks:
 
   lint:
     desc: Run golangci-lint (uses the repo-root .golangci.yml)
+    # --build-tags=integration so build-tagged integration test files are linted
+    # too (static analysis only — no Docker needed).
     cmds:
-      - golangci-lint run ./...
+      - golangci-lint run --build-tags=integration ./...
 
   test:
-    desc: Run backend tests
+    desc: Run backend unit tests
     cmds:
       - go test ./...
+
+  test-integration:
+    desc: Run integration tests (needs Docker; uses testcontainers). Excluded from `check`.
+    cmds:
+      - go test -tags=integration ./...
 
   tidy:
     desc: Tidy and verify go.mod / go.sum

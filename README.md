@@ -60,6 +60,7 @@ MedMarket lets a user:
 | Local orchestration   | Docker Compose                                                    |
 | Deployment            | Google Kubernetes Engine (GKE), Terraform                        |
 | Tooling               | [go-task](https://taskfile.dev) (task runner), golangci-lint      |
+| Testing               | [testify](https://github.com/stretchr/testify), [testcontainers-go](https://golang.testcontainers.org) (integration) |
 
 ## Repository Structure
 
@@ -107,7 +108,8 @@ Then:
 Common tasks (run `task --list` for the full set):
 
 ```sh
-task down            # stop the stack
-task backend:check   # build + vet + lint the backend
-task backend:test    # run backend tests
+task down                       # stop the stack
+task backend:check              # build + vet + test + lint the backend
+task backend:test               # run backend unit tests
+task backend:test-integration   # run integration tests (needs Docker; uses testcontainers)
 ```
