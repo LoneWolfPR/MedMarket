@@ -1,0 +1,18 @@
+[
+  { "code": "mc-ator-20", "label": "Atorvastatin", "strength": "20mg", "minPrice": 7.50, "maxPrice": 13.00, "leadTimeDays": 2 },
+  { "code": "mc-lisi-10", "label": "Lisinopril", "strength": "10mg", "minPrice": 3.50, "maxPrice": 9.00, "leadTimeDays": 3 },
+  { "code": "mc-levo-50", "label": "Levothyroxine", "strength": "50mcg", "minPrice": 11.00, "maxPrice": 19.00, "leadTimeDays": 2 },
+  { "code": "mc-metf-500", "label": "Metformin", "strength": "500mg", "minPrice": 3.00, "maxPrice": 8.50, "leadTimeDays": 3 },
+  { "code": "mc-amlo-5", "label": "Amlodipine", "strength": "5mg", "minPrice": 4.50, "maxPrice": 11.00, "leadTimeDays": 2 },
+  { "code": "mc-omep-20", "label": "Omeprazole", "strength": "20mg", "minPrice": 8.00, "maxPrice": 15.00, "leadTimeDays": 2 },
+  { "code": "mc-losa-50", "label": "Losartan", "strength": "50mg", "minPrice": 6.50, "maxPrice": 13.50, "leadTimeDays": 3 },
+  { "code": "mc-albu-90", "label": "Albuterol", "strength": "90mcg", "minPrice": 22.00, "maxPrice": 40.00, "leadTimeDays": 3 },
+  { "code": "mc-gaba-300", "label": "Gabapentin", "strength": "300mg", "minPrice": 7.50, "maxPrice": 16.00, "leadTimeDays": 3 },
+  { "code": "mc-sert-50", "label": "Sertraline", "strength": "50mg", "minPrice": 8.50, "maxPrice": 17.00, "leadTimeDays": 2 },
+  { "code": "mc-esci-10", "label": "Escitalopram", "strength": "10mg", "minPrice": 10.00, "maxPrice": 20.00, "leadTimeDays": 3 },
+  { "code": "mc-rosu-10", "label": "Rosuvastatin", "strength": "10mg", "minPrice": 11.00, "maxPrice": 23.00, "leadTimeDays": 2 },
+  { "code": "mc-bupr-150", "label": "Bupropion", "strength": "150mg", "minPrice": 14.00, "maxPrice": 27.00, "leadTimeDays": 3 },
+  { "code": "mc-hctz-25", "label": "Hydrochlorothiazide", "strength": "25mg", "minPrice": 3.50, "maxPrice": 7.50, "leadTimeDays": 2 },
+  { "code": "mc-pant-40", "label": "Pantoprazole", "strength": "40mg", "minPrice": 11.00, "maxPrice": 21.00, "leadTimeDays": 3 },
+  { "code": "mc-pred-10", "label": "Prednisone", "strength": "10mg", "minPrice": 4.50, "maxPrice": 10.50, "leadTimeDays": 2 }
+]

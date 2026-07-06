@@ -1,0 +1,18 @@
+[
+  { "sku": "RXD-ATO-20", "drug": "Atorvastatin", "strength": "20mg", "minCents": 800, "maxCents": 1500, "shipsInDays": 3 },
+  { "sku": "RXD-LIS-10", "drug": "Lisinopril", "strength": "10mg", "minCents": 400, "maxCents": 1000, "shipsInDays": 2 },
+  { "sku": "RXD-LEV-50", "drug": "Levothyroxine", "strength": "50mcg", "minCents": 1000, "maxCents": 1800, "shipsInDays": 3 },
+  { "sku": "RXD-MET-500", "drug": "Metformin", "strength": "500mg", "minCents": 400, "maxCents": 900, "shipsInDays": 2 },
+  { "sku": "RXD-AML-5", "drug": "Amlodipine", "strength": "5mg", "minCents": 500, "maxCents": 1200, "shipsInDays": 3 },
+  { "sku": "RXD-MTO-50", "drug": "Metoprolol", "strength": "50mg", "minCents": 600, "maxCents": 1300, "shipsInDays": 2 },
+  { "sku": "RXD-OME-20", "drug": "Omeprazole", "strength": "20mg", "minCents": 900, "maxCents": 1600, "shipsInDays": 3 },
+  { "sku": "RXD-LOS-50", "drug": "Losartan", "strength": "50mg", "minCents": 700, "maxCents": 1400, "shipsInDays": 3 },
+  { "sku": "RXD-ALB-90", "drug": "Albuterol", "strength": "90mcg", "minCents": 2500, "maxCents": 4500, "shipsInDays": 4 },
+  { "sku": "RXD-GAB-300", "drug": "Gabapentin", "strength": "300mg", "minCents": 800, "maxCents": 1700, "shipsInDays": 2 },
+  { "sku": "RXD-SER-50", "drug": "Sertraline", "strength": "50mg", "minCents": 900, "maxCents": 1800, "shipsInDays": 3 },
+  { "sku": "RXD-MON-10", "drug": "Montelukast", "strength": "10mg", "minCents": 1000, "maxCents": 2000, "shipsInDays": 3 },
+  { "sku": "RXD-FUR-40", "drug": "Furosemide", "strength": "40mg", "minCents": 400, "maxCents": 900, "shipsInDays": 2 },
+  { "sku": "RXD-PAN-40", "drug": "Pantoprazole", "strength": "40mg", "minCents": 1200, "maxCents": 2200, "shipsInDays": 3 },
+  { "sku": "RXD-SIM-20", "drug": "Simvastatin", "strength": "20mg", "minCents": 600, "maxCents": 1300, "shipsInDays": 2 },
+  { "sku": "RXD-PRE-10", "drug": "Prednisone", "strength": "10mg", "minCents": 500, "maxCents": 1100, "shipsInDays": 2 }
+]

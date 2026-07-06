@@ -58,6 +58,57 @@ services:
     networks:
       - medmarket
 
+  # Mock pharmacy A — REST/JSON API. The backend reaches it directly over the
+  # network as http://mock-pharmacy-a:8080; the Traefik Host rule is only so you
+  # can inspect it from the host (a Host rule avoids colliding with the
+  # backend's PathPrefix(/api)). Curl it via: -H "Host: pharmacy-a.localhost".
+  mock-pharmacy-a:
+    build:
+      context: ./services/mock-pharmacy-a
+    environment:
+      - PORT=8080
+      - API_KEY=pharmacy-a-dev-key
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pharmacy-a.rule=Host(`pharmacy-a.localhost`)"
+      - "traefik.http.routers.pharmacy-a.entrypoints=web"
+      - "traefik.http.services.pharmacy-a.loadbalancer.server.port=8080"
+    networks:
+      - medmarket
+
+  # Mock pharmacy B — GraphQL API with a deliberately different shape/auth.
+  # Reached as http://mock-pharmacy-b:8080. Curl via: -H "Host: pharmacy-b.localhost".
+  mock-pharmacy-b:
+    build:
+      context: ./services/mock-pharmacy-b
+    environment:
+      - PORT=8080
+      - API_TOKEN=pharmacy-b-dev-token
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pharmacy-b.rule=Host(`pharmacy-b.localhost`)"
+      - "traefik.http.routers.pharmacy-b.entrypoints=web"
+      - "traefik.http.services.pharmacy-b.loadbalancer.server.port=8080"
+    networks:
+      - medmarket
+
+  # Mock shipping — webhook-driven status progression. Reached as
+  # http://mock-shipping:8080. Curl via: -H "Host: shipping.localhost".
+  mock-shipping:
+    build:
+      context: ./services/mock-shipping
+    environment:
+      - PORT=8080
+      # Seconds-per-stage in the ~60s delivered timeline; lower for tests.
+      - SHIPPING_INTERVAL_MS=15000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.shipping.rule=Host(`shipping.localhost`)"
+      - "traefik.http.routers.shipping.entrypoints=web"
+      - "traefik.http.services.shipping.loadbalancer.server.port=8080"
+    networks:
+      - medmarket
+
   postgres:
     image: postgres:17
     environment:

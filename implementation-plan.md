@@ -92,14 +92,20 @@ medmarket/
 │   │   └── context/
 │   ├── e2e/                  # Playwright tests
 │   └── Dockerfile
-├── services/
-│   ├── mock-pharmacy/
-│   │   ├── go.mod
-│   │   ├── main.go
+├── services/                 # Throwaway mocks — Express/Node, not Go
+│   ├── mock-pharmacy-a/       # REST/JSON API
+│   │   ├── package.json
+│   │   ├── server.js
+│   │   ├── catalog.json
+│   │   └── Dockerfile
+│   ├── mock-pharmacy-b/       # GraphQL API (deliberately different shape)
+│   │   ├── package.json
+│   │   ├── server.js
+│   │   ├── catalog.json
 │   │   └── Dockerfile
 │   └── mock-shipping/
-│       ├── go.mod
-│       ├── main.go
+│       ├── package.json
+│       ├── server.js
 │       └── Dockerfile
 ├── workflows/                # Temporal workflow definitions
 │   ├── go.mod
@@ -244,27 +250,28 @@ All inter-service communication happens over a shared Docker network. Backend re
 
 **Goal:** Two mock pharmacy APIs and one mock shipping service running as separate containers, reachable from the backend.
 
-**Skills targeted:** Docker (2→3), hexagonal architecture (1→2), Go service design
+**Skills targeted:** Docker (2→3), hexagonal architecture (1→2), API-shape design
+
+**Note (deviation from original plan):** the mocks are **Express/Node services**, not Go. They exist only to give the backend something to query, so they're kept as simple as possible: a single `server.js` each with a static JSON catalog (no DB). The real work — and the hexagonal payoff — is the per-pharmacy Go **adapters** (Day 4/5) that translate each distinct API onto the one `PharmacyClient` port. Claude implemented all three mocks; the user reviews.
 
 **Tasks:**
 
-1. Build `mock-pharmacy-a` — a small Go HTTP service:
-   - `POST /api/search` accepts a medication name/dosage, returns a price quote with a simulated 200-500ms delay
-   - `POST /api/order` accepts an order, returns a confirmation with a tracking ID
-   - Has a fixed catalog of ~15-20 common medications with randomized pricing within realistic ranges
-   - Simulates occasional errors (~5% of requests return 500)
-2. Build `mock-pharmacy-b` — a **deliberately different API shape** (different endpoint paths, request/response JSON structure, field names, quote format) *and* different behavior. Real pharmacies don't share a contract; each backend adapter's job is to translate its pharmacy's API into the standard `PharmacyClient` port, and the mocks must differ enough to make that translation real:
-   - Different API structure from `mock-pharmacy-a` (this is the point — not a shared contract)
-   - Different pricing ranges (sometimes cheaper, sometimes more expensive)
-   - Different latency profile (100-300ms)
-   - Different error rate (~10%)
-   - Slightly different catalog (overlapping but not identical)
-3. Build `mock-shipping` service:
-   - `POST /api/register-webhook` registers a callback URL
-   - When an order is placed via pharmacy mock, the shipping service starts a goroutine that sends webhook callbacks to the registered URL at intervals (simulating status progression: picked_up → in_transit → out_for_delivery → delivered over ~60 seconds compressed time)
-   - `GET /api/status/:trackingId` returns current status
-4. Write Dockerfiles for all three services
-5. Add all three to `docker-compose.yml` with Traefik labels (these don't need external routing — they're only accessed by the backend over the Docker network, but routing them through Traefik lets you inspect them during development)
+1. Build `mock-pharmacy-a` — an Express **REST/JSON** service:
+   - `POST /api/v1/search` accepts `{ drug, strength }`, returns quotes with money as **integer cents**; simulated 200-500ms delay
+   - `POST /api/v1/order` accepts `{ sku, quantity, shipping }`, returns a confirmation with a tracking ID
+   - `X-Api-Key` header auth; fixed catalog of ~16 common medications with pricing randomized within realistic ranges per request
+   - Simulates occasional errors (~5% of requests return HTTP 500)
+2. Build `mock-pharmacy-b` — a **deliberately different API shape**: an Express **GraphQL** service (`POST /graphql`). Real pharmacies don't share a contract; each backend adapter's job is to translate its pharmacy's API into the standard `PharmacyClient` port, and the mocks must differ enough to make that translation real:
+   - GraphQL, not REST: `medications(name, strength)` query + `placeOrder(input)` mutation
+   - Money as **decimal-string dollars** (`"12.99"`), not cents; `Bearer` token auth, not an API key
+   - Failures surface as GraphQL `errors` (~10%), not HTTP 500 — a different latency profile (100-300ms)
+   - Slightly different catalog (overlapping but not identical to A)
+3. Build `mock-shipping` service (Express):
+   - `POST /api/register-webhook` registers `{ trackingId, callbackUrl }` (the backend calls this after an order is placed — the pharmacy and shipping mocks stay decoupled; the backend orchestrates)
+   - On registration, walks a compressed timeline (picked_up → in_transit → out_for_delivery → delivered over ~60s, interval env-tunable for tests) POSTing a webhook to the callback URL at each stage
+   - `GET /api/status/:trackingId` returns current status + history
+4. Write Dockerfiles for all three services (node:24-alpine)
+5. Add all three to `docker-compose.yml` with Traefik labels. They're only accessed by the backend over the Docker network (`http://mock-pharmacy-a:8080` etc.); the Traefik `Host(...)` rules (`pharmacy-a.localhost`, `pharmacy-b.localhost`, `shipping.localhost`) are only for host-side inspection — Host rules, not path prefixes, so they don't collide with the backend's `PathPrefix(/api)`
 6. Define the `pharmacy` domain in the backend (Pharmacy entity, `PriceQuote` value object — **deferred from Day 2**), then define the **single** outbound port interfaces: `PharmacyClient` (its methods return `PriceQuote`), `ShippingClient`. One port; each pharmacy gets its own adapter (Day 4) that maps its distinct API onto this port.
 7. Test each mock service independently with curl to verify behavior
 
