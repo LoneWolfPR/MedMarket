@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/inbound"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
@@ -79,7 +80,7 @@ func (s *UserService) Register(ctx context.Context, input inbound.RegisterInput)
 	if err != nil {
 		return nil, fmt.Errorf("error in the password hash: %w", err)
 	}
-	phoneNumber, err := user.NewPhone(input.Phone)
+	phoneNumber, err := shared.NewPhone(input.Phone)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", inbound.ErrValidation, err)
 	}

@@ -22,7 +22,7 @@ func validParams(t *testing.T) user.NewUserParams {
 	hash, err := user.NewPasswordHash("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
 	require.NoError(t, err)
 
-	phone, err := user.NewPhone("5551234567")
+	phone, err := shared.NewPhone("5551234567")
 	require.NoError(t, err)
 
 	return user.NewUserParams{

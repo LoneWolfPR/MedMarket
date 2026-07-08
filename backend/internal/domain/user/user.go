@@ -25,7 +25,7 @@ type User struct {
 	PasswordHash PasswordHash
 	FirstName    string
 	LastName     string
-	Phone        Phone
+	Phone        shared.Phone
 	Address      shared.Address
 }
 
@@ -36,7 +36,7 @@ type NewUserParams struct {
 	PasswordHash PasswordHash
 	FirstName    string
 	LastName     string
-	Phone        Phone
+	Phone        shared.Phone
 	Address      shared.Address
 }
 

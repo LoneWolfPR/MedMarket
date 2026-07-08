@@ -114,7 +114,7 @@ func mapToDomainUser(userRecord *ent.User) (*user.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error with passwordhash on file: %w", err)
 	}
-	userPhone, err := user.NewPhone(userRecord.Phone)
+	userPhone, err := shared.NewPhone(userRecord.Phone)
 	if err != nil {
 		return nil, fmt.Errorf("error with the phone on file: %w", err)
 	}

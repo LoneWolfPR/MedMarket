@@ -1,4 +1,4 @@
-package user_test
+package shared_test
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 )
 
 func TestNewPhone_ValidFormats(t *testing.T) {
@@ -22,7 +22,7 @@ func TestNewPhone_ValidFormats(t *testing.T) {
 
 	for name, raw := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := user.NewPhone(raw)
+			got, err := shared.NewPhone(raw)
 
 			require.NoError(t, err)
 			assert.Equal(t, want, got.String(), "should normalize to bare digits")
@@ -34,7 +34,7 @@ func TestNewPhone_ValidFormats(t *testing.T) {
 // TestNewPhone_EmptyIsAllowed documents that phone is optional: an empty string
 // is valid and yields a zero Phone (the service passes user input straight in).
 func TestNewPhone_EmptyIsAllowed(t *testing.T) {
-	got, err := user.NewPhone("")
+	got, err := shared.NewPhone("")
 
 	require.NoError(t, err)
 	assert.True(t, got.IsZero())
@@ -57,9 +57,9 @@ func TestNewPhone_Invalid(t *testing.T) {
 
 	for name, raw := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := user.NewPhone(raw)
+			got, err := shared.NewPhone(raw)
 
-			require.ErrorIs(t, err, user.ErrInvalidPhone)
+			require.ErrorIs(t, err, shared.ErrInvalidPhone)
 			assert.True(t, got.IsZero(), "expected zero Phone on error")
 		})
 	}
@@ -67,7 +67,7 @@ func TestNewPhone_Invalid(t *testing.T) {
 
 // TestPhoneZeroValue documents that the zero Phone is IsZero and stringifies empty.
 func TestPhoneZeroValue(t *testing.T) {
-	var p user.Phone
+	var p shared.Phone
 
 	assert.True(t, p.IsZero())
 	assert.Empty(t, p.String())
