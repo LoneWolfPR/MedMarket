@@ -8,6 +8,28 @@ import (
 )
 
 var (
+	// PharmaciesColumns holds the columns for the "pharmacies" table.
+	PharmaciesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID, Default: schema.Expr("gen_random_uuid()")},
+		{Name: "name", Type: field.TypeString},
+		{Name: "contact_phone", Type: field.TypeString},
+		{Name: "npi", Type: field.TypeString, Unique: true},
+		{Name: "dea", Type: field.TypeString, Unique: true},
+		{Name: "ncpdp", Type: field.TypeString, Unique: true},
+		{Name: "address_street1", Type: field.TypeString},
+		{Name: "address_street2", Type: field.TypeString, Nullable: true},
+		{Name: "address_city", Type: field.TypeString},
+		{Name: "address_state", Type: field.TypeString},
+		{Name: "address_zip", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+	}
+	// PharmaciesTable holds the schema information for the "pharmacies" table.
+	PharmaciesTable = &schema.Table{
+		Name:       "pharmacies",
+		Columns:    PharmaciesColumns,
+		PrimaryKey: []*schema.Column{PharmaciesColumns[0]},
+	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID, Default: schema.Expr("gen_random_uuid()")},
@@ -32,6 +54,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		PharmaciesTable,
 		UsersTable,
 	}
 )

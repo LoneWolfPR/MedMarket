@@ -5,6 +5,7 @@ package ent
 import (
 	"time"
 
+	"github.com/LoneWolfPR/MedMarket/backend/ent/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/schema"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/user"
 	"github.com/google/uuid"
@@ -14,6 +15,58 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	pharmacyFields := schema.Pharmacy{}.Fields()
+	_ = pharmacyFields
+	// pharmacyDescName is the schema descriptor for name field.
+	pharmacyDescName := pharmacyFields[1].Descriptor()
+	// pharmacy.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	pharmacy.NameValidator = pharmacyDescName.Validators[0].(func(string) error)
+	// pharmacyDescContactPhone is the schema descriptor for contact_phone field.
+	pharmacyDescContactPhone := pharmacyFields[2].Descriptor()
+	// pharmacy.ContactPhoneValidator is a validator for the "contact_phone" field. It is called by the builders before save.
+	pharmacy.ContactPhoneValidator = pharmacyDescContactPhone.Validators[0].(func(string) error)
+	// pharmacyDescNpi is the schema descriptor for npi field.
+	pharmacyDescNpi := pharmacyFields[3].Descriptor()
+	// pharmacy.NpiValidator is a validator for the "npi" field. It is called by the builders before save.
+	pharmacy.NpiValidator = pharmacyDescNpi.Validators[0].(func(string) error)
+	// pharmacyDescDea is the schema descriptor for dea field.
+	pharmacyDescDea := pharmacyFields[4].Descriptor()
+	// pharmacy.DeaValidator is a validator for the "dea" field. It is called by the builders before save.
+	pharmacy.DeaValidator = pharmacyDescDea.Validators[0].(func(string) error)
+	// pharmacyDescNcpdp is the schema descriptor for ncpdp field.
+	pharmacyDescNcpdp := pharmacyFields[5].Descriptor()
+	// pharmacy.NcpdpValidator is a validator for the "ncpdp" field. It is called by the builders before save.
+	pharmacy.NcpdpValidator = pharmacyDescNcpdp.Validators[0].(func(string) error)
+	// pharmacyDescAddressStreet1 is the schema descriptor for address_street1 field.
+	pharmacyDescAddressStreet1 := pharmacyFields[6].Descriptor()
+	// pharmacy.AddressStreet1Validator is a validator for the "address_street1" field. It is called by the builders before save.
+	pharmacy.AddressStreet1Validator = pharmacyDescAddressStreet1.Validators[0].(func(string) error)
+	// pharmacyDescAddressCity is the schema descriptor for address_city field.
+	pharmacyDescAddressCity := pharmacyFields[8].Descriptor()
+	// pharmacy.AddressCityValidator is a validator for the "address_city" field. It is called by the builders before save.
+	pharmacy.AddressCityValidator = pharmacyDescAddressCity.Validators[0].(func(string) error)
+	// pharmacyDescAddressState is the schema descriptor for address_state field.
+	pharmacyDescAddressState := pharmacyFields[9].Descriptor()
+	// pharmacy.AddressStateValidator is a validator for the "address_state" field. It is called by the builders before save.
+	pharmacy.AddressStateValidator = pharmacyDescAddressState.Validators[0].(func(string) error)
+	// pharmacyDescAddressZip is the schema descriptor for address_zip field.
+	pharmacyDescAddressZip := pharmacyFields[10].Descriptor()
+	// pharmacy.AddressZipValidator is a validator for the "address_zip" field. It is called by the builders before save.
+	pharmacy.AddressZipValidator = pharmacyDescAddressZip.Validators[0].(func(string) error)
+	// pharmacyDescCreatedAt is the schema descriptor for created_at field.
+	pharmacyDescCreatedAt := pharmacyFields[11].Descriptor()
+	// pharmacy.DefaultCreatedAt holds the default value on creation for the created_at field.
+	pharmacy.DefaultCreatedAt = pharmacyDescCreatedAt.Default.(func() time.Time)
+	// pharmacyDescUpdatedAt is the schema descriptor for updated_at field.
+	pharmacyDescUpdatedAt := pharmacyFields[12].Descriptor()
+	// pharmacy.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	pharmacy.DefaultUpdatedAt = pharmacyDescUpdatedAt.Default.(func() time.Time)
+	// pharmacy.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	pharmacy.UpdateDefaultUpdatedAt = pharmacyDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// pharmacyDescID is the schema descriptor for id field.
+	pharmacyDescID := pharmacyFields[0].Descriptor()
+	// pharmacy.DefaultID holds the default value on creation for the id field.
+	pharmacy.DefaultID = pharmacyDescID.Default.(func() uuid.UUID)
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescEmail is the schema descriptor for email field.

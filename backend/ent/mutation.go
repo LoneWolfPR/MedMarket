@@ -11,6 +11,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/predicate"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/user"
 	"github.com/google/uuid"
@@ -25,8 +26,957 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypeUser = "User"
+	TypePharmacy = "Pharmacy"
+	TypeUser     = "User"
 )
+
+// PharmacyMutation represents an operation that mutates the Pharmacy nodes in the graph.
+type PharmacyMutation struct {
+	config
+	op              Op
+	typ             string
+	id              *uuid.UUID
+	name            *string
+	contact_phone   *string
+	npi             *string
+	dea             *string
+	ncpdp           *string
+	address_street1 *string
+	address_street2 *string
+	address_city    *string
+	address_state   *string
+	address_zip     *string
+	created_at      *time.Time
+	updated_at      *time.Time
+	clearedFields   map[string]struct{}
+	done            bool
+	oldValue        func(context.Context) (*Pharmacy, error)
+	predicates      []predicate.Pharmacy
+}
+
+var _ ent.Mutation = (*PharmacyMutation)(nil)
+
+// pharmacyOption allows management of the mutation configuration using functional options.
+type pharmacyOption func(*PharmacyMutation)
+
+// newPharmacyMutation creates new mutation for the Pharmacy entity.
+func newPharmacyMutation(c config, op Op, opts ...pharmacyOption) *PharmacyMutation {
+	m := &PharmacyMutation{
+		config:        c,
+		op:            op,
+		typ:           TypePharmacy,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withPharmacyID sets the ID field of the mutation.
+func withPharmacyID(id uuid.UUID) pharmacyOption {
+	return func(m *PharmacyMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Pharmacy
+		)
+		m.oldValue = func(ctx context.Context) (*Pharmacy, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Pharmacy.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withPharmacy sets the old Pharmacy of the mutation.
+func withPharmacy(node *Pharmacy) pharmacyOption {
+	return func(m *PharmacyMutation) {
+		m.oldValue = func(context.Context) (*Pharmacy, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m PharmacyMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m PharmacyMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Pharmacy entities.
+func (m *PharmacyMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *PharmacyMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *PharmacyMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Pharmacy.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *PharmacyMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *PharmacyMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *PharmacyMutation) ResetName() {
+	m.name = nil
+}
+
+// SetContactPhone sets the "contact_phone" field.
+func (m *PharmacyMutation) SetContactPhone(s string) {
+	m.contact_phone = &s
+}
+
+// ContactPhone returns the value of the "contact_phone" field in the mutation.
+func (m *PharmacyMutation) ContactPhone() (r string, exists bool) {
+	v := m.contact_phone
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContactPhone returns the old "contact_phone" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldContactPhone(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContactPhone is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContactPhone requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContactPhone: %w", err)
+	}
+	return oldValue.ContactPhone, nil
+}
+
+// ResetContactPhone resets all changes to the "contact_phone" field.
+func (m *PharmacyMutation) ResetContactPhone() {
+	m.contact_phone = nil
+}
+
+// SetNpi sets the "npi" field.
+func (m *PharmacyMutation) SetNpi(s string) {
+	m.npi = &s
+}
+
+// Npi returns the value of the "npi" field in the mutation.
+func (m *PharmacyMutation) Npi() (r string, exists bool) {
+	v := m.npi
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNpi returns the old "npi" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldNpi(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNpi is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNpi requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNpi: %w", err)
+	}
+	return oldValue.Npi, nil
+}
+
+// ResetNpi resets all changes to the "npi" field.
+func (m *PharmacyMutation) ResetNpi() {
+	m.npi = nil
+}
+
+// SetDea sets the "dea" field.
+func (m *PharmacyMutation) SetDea(s string) {
+	m.dea = &s
+}
+
+// Dea returns the value of the "dea" field in the mutation.
+func (m *PharmacyMutation) Dea() (r string, exists bool) {
+	v := m.dea
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDea returns the old "dea" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldDea(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDea is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDea requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDea: %w", err)
+	}
+	return oldValue.Dea, nil
+}
+
+// ResetDea resets all changes to the "dea" field.
+func (m *PharmacyMutation) ResetDea() {
+	m.dea = nil
+}
+
+// SetNcpdp sets the "ncpdp" field.
+func (m *PharmacyMutation) SetNcpdp(s string) {
+	m.ncpdp = &s
+}
+
+// Ncpdp returns the value of the "ncpdp" field in the mutation.
+func (m *PharmacyMutation) Ncpdp() (r string, exists bool) {
+	v := m.ncpdp
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNcpdp returns the old "ncpdp" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldNcpdp(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNcpdp is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNcpdp requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNcpdp: %w", err)
+	}
+	return oldValue.Ncpdp, nil
+}
+
+// ResetNcpdp resets all changes to the "ncpdp" field.
+func (m *PharmacyMutation) ResetNcpdp() {
+	m.ncpdp = nil
+}
+
+// SetAddressStreet1 sets the "address_street1" field.
+func (m *PharmacyMutation) SetAddressStreet1(s string) {
+	m.address_street1 = &s
+}
+
+// AddressStreet1 returns the value of the "address_street1" field in the mutation.
+func (m *PharmacyMutation) AddressStreet1() (r string, exists bool) {
+	v := m.address_street1
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAddressStreet1 returns the old "address_street1" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldAddressStreet1(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAddressStreet1 is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAddressStreet1 requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAddressStreet1: %w", err)
+	}
+	return oldValue.AddressStreet1, nil
+}
+
+// ResetAddressStreet1 resets all changes to the "address_street1" field.
+func (m *PharmacyMutation) ResetAddressStreet1() {
+	m.address_street1 = nil
+}
+
+// SetAddressStreet2 sets the "address_street2" field.
+func (m *PharmacyMutation) SetAddressStreet2(s string) {
+	m.address_street2 = &s
+}
+
+// AddressStreet2 returns the value of the "address_street2" field in the mutation.
+func (m *PharmacyMutation) AddressStreet2() (r string, exists bool) {
+	v := m.address_street2
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAddressStreet2 returns the old "address_street2" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldAddressStreet2(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAddressStreet2 is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAddressStreet2 requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAddressStreet2: %w", err)
+	}
+	return oldValue.AddressStreet2, nil
+}
+
+// ClearAddressStreet2 clears the value of the "address_street2" field.
+func (m *PharmacyMutation) ClearAddressStreet2() {
+	m.address_street2 = nil
+	m.clearedFields[pharmacy.FieldAddressStreet2] = struct{}{}
+}
+
+// AddressStreet2Cleared returns if the "address_street2" field was cleared in this mutation.
+func (m *PharmacyMutation) AddressStreet2Cleared() bool {
+	_, ok := m.clearedFields[pharmacy.FieldAddressStreet2]
+	return ok
+}
+
+// ResetAddressStreet2 resets all changes to the "address_street2" field.
+func (m *PharmacyMutation) ResetAddressStreet2() {
+	m.address_street2 = nil
+	delete(m.clearedFields, pharmacy.FieldAddressStreet2)
+}
+
+// SetAddressCity sets the "address_city" field.
+func (m *PharmacyMutation) SetAddressCity(s string) {
+	m.address_city = &s
+}
+
+// AddressCity returns the value of the "address_city" field in the mutation.
+func (m *PharmacyMutation) AddressCity() (r string, exists bool) {
+	v := m.address_city
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAddressCity returns the old "address_city" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldAddressCity(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAddressCity is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAddressCity requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAddressCity: %w", err)
+	}
+	return oldValue.AddressCity, nil
+}
+
+// ResetAddressCity resets all changes to the "address_city" field.
+func (m *PharmacyMutation) ResetAddressCity() {
+	m.address_city = nil
+}
+
+// SetAddressState sets the "address_state" field.
+func (m *PharmacyMutation) SetAddressState(s string) {
+	m.address_state = &s
+}
+
+// AddressState returns the value of the "address_state" field in the mutation.
+func (m *PharmacyMutation) AddressState() (r string, exists bool) {
+	v := m.address_state
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAddressState returns the old "address_state" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldAddressState(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAddressState is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAddressState requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAddressState: %w", err)
+	}
+	return oldValue.AddressState, nil
+}
+
+// ResetAddressState resets all changes to the "address_state" field.
+func (m *PharmacyMutation) ResetAddressState() {
+	m.address_state = nil
+}
+
+// SetAddressZip sets the "address_zip" field.
+func (m *PharmacyMutation) SetAddressZip(s string) {
+	m.address_zip = &s
+}
+
+// AddressZip returns the value of the "address_zip" field in the mutation.
+func (m *PharmacyMutation) AddressZip() (r string, exists bool) {
+	v := m.address_zip
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAddressZip returns the old "address_zip" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldAddressZip(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAddressZip is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAddressZip requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAddressZip: %w", err)
+	}
+	return oldValue.AddressZip, nil
+}
+
+// ResetAddressZip resets all changes to the "address_zip" field.
+func (m *PharmacyMutation) ResetAddressZip() {
+	m.address_zip = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *PharmacyMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *PharmacyMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *PharmacyMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *PharmacyMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *PharmacyMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the Pharmacy entity.
+// If the Pharmacy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PharmacyMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *PharmacyMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the PharmacyMutation builder.
+func (m *PharmacyMutation) Where(ps ...predicate.Pharmacy) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the PharmacyMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *PharmacyMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Pharmacy, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *PharmacyMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *PharmacyMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Pharmacy).
+func (m *PharmacyMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *PharmacyMutation) Fields() []string {
+	fields := make([]string, 0, 12)
+	if m.name != nil {
+		fields = append(fields, pharmacy.FieldName)
+	}
+	if m.contact_phone != nil {
+		fields = append(fields, pharmacy.FieldContactPhone)
+	}
+	if m.npi != nil {
+		fields = append(fields, pharmacy.FieldNpi)
+	}
+	if m.dea != nil {
+		fields = append(fields, pharmacy.FieldDea)
+	}
+	if m.ncpdp != nil {
+		fields = append(fields, pharmacy.FieldNcpdp)
+	}
+	if m.address_street1 != nil {
+		fields = append(fields, pharmacy.FieldAddressStreet1)
+	}
+	if m.address_street2 != nil {
+		fields = append(fields, pharmacy.FieldAddressStreet2)
+	}
+	if m.address_city != nil {
+		fields = append(fields, pharmacy.FieldAddressCity)
+	}
+	if m.address_state != nil {
+		fields = append(fields, pharmacy.FieldAddressState)
+	}
+	if m.address_zip != nil {
+		fields = append(fields, pharmacy.FieldAddressZip)
+	}
+	if m.created_at != nil {
+		fields = append(fields, pharmacy.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, pharmacy.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *PharmacyMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case pharmacy.FieldName:
+		return m.Name()
+	case pharmacy.FieldContactPhone:
+		return m.ContactPhone()
+	case pharmacy.FieldNpi:
+		return m.Npi()
+	case pharmacy.FieldDea:
+		return m.Dea()
+	case pharmacy.FieldNcpdp:
+		return m.Ncpdp()
+	case pharmacy.FieldAddressStreet1:
+		return m.AddressStreet1()
+	case pharmacy.FieldAddressStreet2:
+		return m.AddressStreet2()
+	case pharmacy.FieldAddressCity:
+		return m.AddressCity()
+	case pharmacy.FieldAddressState:
+		return m.AddressState()
+	case pharmacy.FieldAddressZip:
+		return m.AddressZip()
+	case pharmacy.FieldCreatedAt:
+		return m.CreatedAt()
+	case pharmacy.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *PharmacyMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case pharmacy.FieldName:
+		return m.OldName(ctx)
+	case pharmacy.FieldContactPhone:
+		return m.OldContactPhone(ctx)
+	case pharmacy.FieldNpi:
+		return m.OldNpi(ctx)
+	case pharmacy.FieldDea:
+		return m.OldDea(ctx)
+	case pharmacy.FieldNcpdp:
+		return m.OldNcpdp(ctx)
+	case pharmacy.FieldAddressStreet1:
+		return m.OldAddressStreet1(ctx)
+	case pharmacy.FieldAddressStreet2:
+		return m.OldAddressStreet2(ctx)
+	case pharmacy.FieldAddressCity:
+		return m.OldAddressCity(ctx)
+	case pharmacy.FieldAddressState:
+		return m.OldAddressState(ctx)
+	case pharmacy.FieldAddressZip:
+		return m.OldAddressZip(ctx)
+	case pharmacy.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case pharmacy.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown Pharmacy field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PharmacyMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case pharmacy.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case pharmacy.FieldContactPhone:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContactPhone(v)
+		return nil
+	case pharmacy.FieldNpi:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNpi(v)
+		return nil
+	case pharmacy.FieldDea:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDea(v)
+		return nil
+	case pharmacy.FieldNcpdp:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNcpdp(v)
+		return nil
+	case pharmacy.FieldAddressStreet1:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAddressStreet1(v)
+		return nil
+	case pharmacy.FieldAddressStreet2:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAddressStreet2(v)
+		return nil
+	case pharmacy.FieldAddressCity:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAddressCity(v)
+		return nil
+	case pharmacy.FieldAddressState:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAddressState(v)
+		return nil
+	case pharmacy.FieldAddressZip:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAddressZip(v)
+		return nil
+	case pharmacy.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case pharmacy.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Pharmacy field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *PharmacyMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *PharmacyMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PharmacyMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown Pharmacy numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *PharmacyMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(pharmacy.FieldAddressStreet2) {
+		fields = append(fields, pharmacy.FieldAddressStreet2)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *PharmacyMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *PharmacyMutation) ClearField(name string) error {
+	switch name {
+	case pharmacy.FieldAddressStreet2:
+		m.ClearAddressStreet2()
+		return nil
+	}
+	return fmt.Errorf("unknown Pharmacy nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *PharmacyMutation) ResetField(name string) error {
+	switch name {
+	case pharmacy.FieldName:
+		m.ResetName()
+		return nil
+	case pharmacy.FieldContactPhone:
+		m.ResetContactPhone()
+		return nil
+	case pharmacy.FieldNpi:
+		m.ResetNpi()
+		return nil
+	case pharmacy.FieldDea:
+		m.ResetDea()
+		return nil
+	case pharmacy.FieldNcpdp:
+		m.ResetNcpdp()
+		return nil
+	case pharmacy.FieldAddressStreet1:
+		m.ResetAddressStreet1()
+		return nil
+	case pharmacy.FieldAddressStreet2:
+		m.ResetAddressStreet2()
+		return nil
+	case pharmacy.FieldAddressCity:
+		m.ResetAddressCity()
+		return nil
+	case pharmacy.FieldAddressState:
+		m.ResetAddressState()
+		return nil
+	case pharmacy.FieldAddressZip:
+		m.ResetAddressZip()
+		return nil
+	case pharmacy.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case pharmacy.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown Pharmacy field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *PharmacyMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *PharmacyMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *PharmacyMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *PharmacyMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *PharmacyMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *PharmacyMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *PharmacyMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown Pharmacy unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *PharmacyMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown Pharmacy edge %s", name)
+}
 
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
