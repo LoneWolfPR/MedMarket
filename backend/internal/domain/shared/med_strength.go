@@ -50,3 +50,7 @@ func NewMedStrength(value, unit string) (MedStrength, error) {
 func (ms MedStrength) IsZero() bool {
 	return ms == MedStrength{}
 }
+
+func (ms MedStrength) String() string {
+	return ms.value + ms.unit
+}

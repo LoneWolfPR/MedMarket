@@ -8,5 +8,5 @@ import (
 
 // PharmacyClient declares all the methods the adapter must implement
 type PharmacyClient interface {
-	Search(ctx context.Context, criteria pharmacy.SearchCriteria) ([]pharmacy.PriceQuote, error)
+	Search(ctx context.Context, c pharmacy.SearchCriteria) ([]pharmacy.PriceQuote, error)
 }

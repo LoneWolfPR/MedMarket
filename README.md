@@ -68,13 +68,13 @@ MedMarket lets a user:
 .
 ├── backend/        Go API — hexagonal architecture (domain, ports, adapters)
 ├── frontend/       React + Vite + TypeScript web app
-├── services/       Mock external services (pharmacy, shipping) — placeholder
+├── services/       Mock external services (pharmacy A/B, shipping) — Node/Express
 ├── workflows/      Temporal workflow & activity definitions — placeholder
 ├── worker/         Temporal worker process — placeholder
 ├── k8s/            Kubernetes manifests (base + overlays) — placeholder
 ├── terraform/      Infrastructure as code for GKE — placeholder
 ├── .github/        CI/CD workflows — placeholder
-├── docker-compose.yml   Full local stack (Traefik, backend, frontend, Postgres)
+├── docker-compose.yml   Full local stack (Traefik, backend, frontend, Postgres, mock services)
 ├── go.work         Go workspace tying the Go modules together
 ├── Taskfile.yml    Task runner entry point (see `task --list`)
 └── .golangci.yml   Linter configuration (applies across Go modules)

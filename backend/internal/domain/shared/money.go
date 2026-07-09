@@ -3,6 +3,9 @@ package shared
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 )
 
 // Money is a universal type for storing a price or payment because
@@ -11,13 +14,38 @@ type Money struct {
 	value int64
 }
 
-// ErrInvalidMoneyValue is a sentinel
-var ErrInvalidMoneyValue = errors.New("invalid money value")
+//nolint:revive // sentinel errors are self-documenting
+var (
+	ErrInvalidMoneyValue   = errors.New("invalid money value")
+	ErrInvalidDollarString = errors.New("invalid dollar string")
+)
+
+var validDollarStringFmt = regexp.MustCompile(`^\d+(\.\d{2})?$`)
 
 // NewMoneyFromCents is the constructor to set up the Money VO
 func NewMoneyFromCents(cents int64) (Money, error) {
 	if cents < 0 {
 		return Money{}, ErrInvalidMoneyValue
+	}
+	return Money{value: cents}, nil
+}
+
+// NewMoneyFromDollars takes a dollar string, validates its format and constructs
+// a Money VO from it
+func NewMoneyFromDollars(dollars string) (Money, error) {
+	if !validDollarStringFmt.MatchString(dollars) {
+		return Money{}, ErrInvalidDollarString
+	}
+
+	centsStr := ""
+	if strings.Contains(dollars, ".") {
+		centsStr = strings.Replace(dollars, ".", "", 1)
+	} else {
+		centsStr = dollars + "00"
+	}
+	cents, err := strconv.ParseInt(centsStr, 10, 64)
+	if err != nil {
+		return Money{}, fmt.Errorf("error converting dollar string: %w", err)
 	}
 	return Money{value: cents}, nil
 }
