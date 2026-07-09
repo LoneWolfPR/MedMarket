@@ -45,3 +45,8 @@ func NewMedStrength(value, unit string) (MedStrength, error) {
 		unit:  normalizedUnit,
 	}, nil
 }
+
+// IsZero returns if a MedStrength type is empty
+func (ms MedStrength) IsZero() bool {
+	return ms == MedStrength{}
+}
