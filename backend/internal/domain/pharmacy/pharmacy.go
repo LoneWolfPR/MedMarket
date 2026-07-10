@@ -12,6 +12,7 @@ import (
 // pharmacy entity
 type Pharmacy struct {
 	ID           uuid.UUID
+	Code         string
 	Name         string
 	Address      shared.Address
 	ContactPhone shared.Phone
@@ -22,6 +23,7 @@ type Pharmacy struct {
 
 //nolint:revive // sentinel errors are self-documenting
 var (
+	ErrMissingCode    = errors.New("code is missing")
 	ErrMissingName    = errors.New("name is missing")
 	ErrInvalidAddress = errors.New("address is invalid")
 	ErrMissingPhone   = errors.New("contact phone is missing")
@@ -33,6 +35,7 @@ var (
 // NewPharmacyParams holds all the necessary input parameters
 // for creating anew pharmacy
 type NewPharmacyParams struct {
+	Code         string
 	Name         string
 	Address      shared.Address
 	ContactPhone shared.Phone
@@ -43,6 +46,9 @@ type NewPharmacyParams struct {
 
 // NewPharmacy is the contructor for a new pharmcy entity
 func NewPharmacy(p NewPharmacyParams) (*Pharmacy, error) {
+	if p.Code == "" {
+		return nil, ErrMissingCode
+	}
 	if p.Name == "" {
 		return nil, ErrMissingName
 	}
@@ -62,6 +68,7 @@ func NewPharmacy(p NewPharmacyParams) (*Pharmacy, error) {
 		return nil, ErrMissingNCPDP
 	}
 	return &Pharmacy{
+		Code:         p.Code,
 		Name:         p.Name,
 		Address:      p.Address,
 		ContactPhone: p.ContactPhone,

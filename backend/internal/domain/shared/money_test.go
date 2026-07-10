@@ -33,6 +33,51 @@ func TestNewMoneyFromCents_Negative(t *testing.T) {
 	assert.True(t, got.IsZero(), "expected zero Money on error")
 }
 
+func TestNewMoneyFromDollars_Valid(t *testing.T) {
+	tests := map[string]struct {
+		dollars   string
+		wantCents int64
+	}{
+		"dollars and cents":      {dollars: "12.99", wantCents: 1299},
+		"whole dollars no point": {dollars: "12", wantCents: 1200},
+		"cents only":             {dollars: "0.05", wantCents: 5},
+		"zero":                   {dollars: "0", wantCents: 0},
+		"hundreds":               {dollars: "100", wantCents: 10000},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := shared.NewMoneyFromDollars(tc.dollars)
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantCents, got.Cents())
+		})
+	}
+}
+
+func TestNewMoneyFromDollars_Invalid(t *testing.T) {
+	// The regex requires digits and, if present, exactly two decimal places.
+	tests := map[string]string{
+		"one decimal place":    "12.9",
+		"three decimal places": "12.999",
+		"no leading digit":     ".99",
+		"negative":             "-1",
+		"empty":                "",
+		"currency symbol":      "$12.99",
+		"thousands separator":  "1,299.00",
+		"trailing space":       "12.99 ",
+	}
+
+	for name, dollars := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := shared.NewMoneyFromDollars(dollars)
+
+			require.ErrorIs(t, err, shared.ErrInvalidDollarString)
+			assert.True(t, got.IsZero(), "expected zero Money on error")
+		})
+	}
+}
+
 func TestMoney_IsZero(t *testing.T) {
 	zero, err := shared.NewMoneyFromCents(0)
 	require.NoError(t, err)

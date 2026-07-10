@@ -25,10 +25,14 @@ import (
 )
 
 type config struct {
-	DatabaseURL string
-	JWTSecret   []byte
-	JWTTTL      time.Duration
-	Port        string
+	DatabaseURL      string
+	JWTSecret        []byte
+	JWTTTL           time.Duration
+	Port             string
+	PharmacyABaseURL string
+	PharmacyASecret  string
+	PharmacyBBaseURL string
+	PharmacyBSecret  string
 }
 
 func loadConfig() (config, error) {
@@ -57,11 +61,31 @@ func loadConfig() (config, error) {
 	if p := os.Getenv(EnvPort); p != "" {
 		port = p
 	}
+	pharmABaseURL := os.Getenv(EnvPharmacyABaseURL)
+	if pharmABaseURL == "" {
+		return config{}, fmt.Errorf("pharmacy a base url is missing")
+	}
+	pharmASecret := os.Getenv(EnvPharmacyASecret)
+	if pharmASecret == "" {
+		return config{}, fmt.Errorf("pharmacy a secret is missing")
+	}
+	pharmBBaseURL := os.Getenv(EnvPharmacyBBaseURL)
+	if pharmBBaseURL == "" {
+		return config{}, fmt.Errorf("pharmacy b base url is missing")
+	}
+	pharmBSecret := os.Getenv(EnvPharmacyBSecret)
+	if pharmBSecret == "" {
+		return config{}, fmt.Errorf("pharmacy b secret is missing")
+	}
 	return config{
-		DatabaseURL: dbURL,
-		JWTSecret:   []byte(jwtSecret),
-		JWTTTL:      jwtTTL,
-		Port:        port,
+		DatabaseURL:      dbURL,
+		JWTSecret:        []byte(jwtSecret),
+		JWTTTL:           jwtTTL,
+		Port:             port,
+		PharmacyABaseURL: pharmABaseURL,
+		PharmacyASecret:  pharmASecret,
+		PharmacyBBaseURL: pharmBBaseURL,
+		PharmacyBSecret:  pharmBSecret,
 	}, nil
 }
 
@@ -99,6 +123,19 @@ func run() error {
 			logger.Error("failed to close db client", "error", cerr)
 		}
 	}()
+
+	// Setup seeding of pharmacy data
+	pharmacyRepo, err := postgres.NewPharmacyRepository(postgres.NewPharmacyRepositoryParams{
+		Client: client,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("error creating pharmacy repo: %w", err)
+	}
+
+	if err := seedPharmacies(context.Background(), pharmacyRepo, pharmacySeeds); err != nil {
+		return fmt.Errorf("error seeding pharmacy data: %w", err)
+	}
 
 	// Outbound adapters
 	repo, err := postgres.NewUserRepository(postgres.NewUserRepositoryParams{

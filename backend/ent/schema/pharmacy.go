@@ -23,6 +23,12 @@ func (Pharmacy) Fields() []ent.Field {
 			Default(uuid.New).
 			Annotations(entsql.DefaultExpr("gen_random_uuid()")).
 			Immutable(),
+		// Stable business identifier (slug, e.g. "mock-pharmacy-a"). Explicitly
+		// set by the app so config/adapters bind on it instead of the surrogate
+		// PK; Unique so the seed's check-by-code is safe.
+		field.String("code").
+			Unique().
+			NotEmpty(),
 		field.String("name").
 			NotEmpty(),
 		field.String("contact_phone").

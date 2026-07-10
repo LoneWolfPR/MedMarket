@@ -28,6 +28,11 @@ services:
       # Local-dev only. Real secrets come from the platform on GKE.
       - JWT_SECRET=local-dev-insecure-secret-change-me
       - JWT_TTL=24h
+      # Mock PHarmacy service config variables
+      - PHARMACY_A_BASE_URL=http://mock-pharmacy-a:8080
+      - PHARMACY_A_SECRET=pharmacy-a-dev-key
+      - PHARMACY_B_BASE_URL=http://mock-pharmacy-b:8080
+      - PHARMACY_B_SECRET=pharmacy-b-dev-token
     labels:
       - "traefik.enable=true"
       # PathPrefix(/api) is longer than the frontend's PathPrefix(/), so Traefik

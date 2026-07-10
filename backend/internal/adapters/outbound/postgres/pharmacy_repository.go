@@ -50,6 +50,7 @@ func (r *PharmacyRepository) Create(
 	p *pharmacy.Pharmacy,
 ) (*pharmacy.Pharmacy, error) {
 	pharmacyRecord, err := r.client.Pharmacy.Create().
+		SetCode(p.Code).
 		SetName(p.Name).
 		SetAddressStreet1(p.Address.Street1).
 		SetAddressStreet2(p.Address.Street2).
@@ -77,6 +78,24 @@ func (r *PharmacyRepository) GetByID(
 ) (*pharmacy.Pharmacy, error) {
 	pharmacyRecord, err := r.client.Pharmacy.Query().
 		Where(entpharmacy.IDEQ(id)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, outbound.ErrPharmacyNotFound
+		}
+		return nil, fmt.Errorf("error searching for pharmacy: %w", err)
+	}
+	return mapToDomainPharmacy(pharmacyRecord)
+}
+
+// GetByCode looks up a pharmacy by its stable business code (e.g.
+// "mock-pharmacy-a"), returning ErrPharmacyNotFound when none matches.
+func (r *PharmacyRepository) GetByCode(
+	ctx context.Context,
+	code string,
+) (*pharmacy.Pharmacy, error) {
+	pharmacyRecord, err := r.client.Pharmacy.Query().
+		Where(entpharmacy.CodeEQ(code)).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -127,6 +146,7 @@ func mapToDomainPharmacy(pharmacyRecord *ent.Pharmacy) (*pharmacy.Pharmacy, erro
 
 	return &pharmacy.Pharmacy{
 		ID:           pharmacyRecord.ID,
+		Code:         pharmacyRecord.Code,
 		Name:         pharmacyRecord.Name,
 		ContactPhone: contactPhone,
 		NPINum:       npiNum,

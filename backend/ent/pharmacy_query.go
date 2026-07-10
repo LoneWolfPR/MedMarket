@@ -263,12 +263,12 @@ func (_q *PharmacyQuery) Clone() *PharmacyQuery {
 // Example:
 //
 //	var v []struct {
-//		Name string `json:"name,omitempty"`
+//		Code string `json:"code,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.Pharmacy.Query().
-//		GroupBy(pharmacy.FieldName).
+//		GroupBy(pharmacy.FieldCode).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *PharmacyQuery) GroupBy(field string, fields ...string) *PharmacyGroupBy {
@@ -286,11 +286,11 @@ func (_q *PharmacyQuery) GroupBy(field string, fields ...string) *PharmacyGroupB
 // Example:
 //
 //	var v []struct {
-//		Name string `json:"name,omitempty"`
+//		Code string `json:"code,omitempty"`
 //	}
 //
 //	client.Pharmacy.Query().
-//		Select(pharmacy.FieldName).
+//		Select(pharmacy.FieldCode).
 //		Scan(ctx, &v)
 func (_q *PharmacyQuery) Select(fields ...string) *PharmacySelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

@@ -90,7 +90,7 @@ func setupPharmacyRepo(t *testing.T) *postgres.PharmacyRepository {
 
 // newDomainPharmacy builds a valid, fully-populated domain pharmacy for
 // persistence.
-func newDomainPharmacy(t *testing.T, name, npi, dea, ncpdp string) *pharmacy.Pharmacy {
+func newDomainPharmacy(t *testing.T, code, name, npi, dea, ncpdp string) *pharmacy.Pharmacy {
 	t.Helper()
 
 	phone, err := shared.NewPhone("5551234567")
@@ -103,6 +103,7 @@ func newDomainPharmacy(t *testing.T, name, npi, dea, ncpdp string) *pharmacy.Pha
 	require.NoError(t, err)
 
 	p, err := pharmacy.NewPharmacy(pharmacy.NewPharmacyParams{
+		Code:         code,
 		Name:         name,
 		Address:      fixtureAddress,
 		ContactPhone: phone,
@@ -120,7 +121,7 @@ func TestPharmacyRepository(t *testing.T) {
 	t.Run("create assigns an ID and round-trips via GetByID", func(t *testing.T) {
 		repo := setupPharmacyRepo(t)
 
-		created, err := repo.Create(ctx, newDomainPharmacy(t, "Acme Pharmacy", npiA, deaA, ncpdpA))
+		created, err := repo.Create(ctx, newDomainPharmacy(t, "acme", "Acme Pharmacy", npiA, deaA, ncpdpA))
 		require.NoError(t, err)
 		assert.NotEqual(t, uuid.Nil, created.ID, "Create should surface the DB-assigned ID")
 
@@ -138,9 +139,9 @@ func TestPharmacyRepository(t *testing.T) {
 	t.Run("List returns all created pharmacies", func(t *testing.T) {
 		repo := setupPharmacyRepo(t)
 
-		a, err := repo.Create(ctx, newDomainPharmacy(t, "Acme", npiA, deaA, ncpdpA))
+		a, err := repo.Create(ctx, newDomainPharmacy(t, "acme", "Acme", npiA, deaA, ncpdpA))
 		require.NoError(t, err)
-		b, err := repo.Create(ctx, newDomainPharmacy(t, "Bell", npiB, deaB, ncpdpB))
+		b, err := repo.Create(ctx, newDomainPharmacy(t, "bell", "Bell", npiB, deaB, ncpdpB))
 		require.NoError(t, err)
 
 		list, err := repo.List(ctx)
@@ -172,13 +173,34 @@ func TestPharmacyRepository(t *testing.T) {
 		assert.Nil(t, got)
 	})
 
+	t.Run("GetByCode round-trips a created pharmacy", func(t *testing.T) {
+		repo := setupPharmacyRepo(t)
+
+		created, err := repo.Create(ctx, newDomainPharmacy(t, "acme", "Acme", npiA, deaA, ncpdpA))
+		require.NoError(t, err)
+
+		got, err := repo.GetByCode(ctx, "acme")
+		require.NoError(t, err)
+		assert.Equal(t, created.ID, got.ID)
+		assert.Equal(t, "acme", got.Code)
+	})
+
+	t.Run("GetByCode returns ErrPharmacyNotFound for an unknown code", func(t *testing.T) {
+		repo := setupPharmacyRepo(t)
+
+		got, err := repo.GetByCode(ctx, "does-not-exist")
+
+		require.ErrorIs(t, err, outbound.ErrPharmacyNotFound)
+		assert.Nil(t, got)
+	})
+
 	t.Run("duplicate regulatory ID returns ErrPharmacyExists", func(t *testing.T) {
 		repo := setupPharmacyRepo(t)
 
-		_, err := repo.Create(ctx, newDomainPharmacy(t, "Acme", npiA, deaA, ncpdpA))
+		_, err := repo.Create(ctx, newDomainPharmacy(t, "acme", "Acme", npiA, deaA, ncpdpA))
 		require.NoError(t, err)
 
-		got, err := repo.Create(ctx, newDomainPharmacy(t, "Acme Copy", npiA, deaA, ncpdpA))
+		got, err := repo.Create(ctx, newDomainPharmacy(t, "acme-copy", "Acme Copy", npiA, deaA, ncpdpA))
 
 		require.ErrorIs(t, err, outbound.ErrPharmacyExists)
 		assert.Nil(t, got)
@@ -187,7 +209,7 @@ func TestPharmacyRepository(t *testing.T) {
 	t.Run("empty street2 round-trips as a zero value", func(t *testing.T) {
 		repo := setupPharmacyRepo(t)
 
-		p := newDomainPharmacy(t, "Acme", npiA, deaA, ncpdpA)
+		p := newDomainPharmacy(t, "acme", "Acme", npiA, deaA, ncpdpA)
 		p.Address.Street2 = ""
 
 		created, err := repo.Create(ctx, p)

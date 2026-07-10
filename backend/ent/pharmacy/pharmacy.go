@@ -14,6 +14,8 @@ const (
 	Label = "pharmacy"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
+	// FieldCode holds the string denoting the code field in the database.
+	FieldCode = "code"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
 	// FieldContactPhone holds the string denoting the contact_phone field in the database.
@@ -45,6 +47,7 @@ const (
 // Columns holds all SQL columns for pharmacy fields.
 var Columns = []string{
 	FieldID,
+	FieldCode,
 	FieldName,
 	FieldContactPhone,
 	FieldNpi,
@@ -70,6 +73,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// CodeValidator is a validator for the "code" field. It is called by the builders before save.
+	CodeValidator func(string) error
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
 	// ContactPhoneValidator is a validator for the "contact_phone" field. It is called by the builders before save.
@@ -104,6 +109,11 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByCode orders the results by the code field.
+func ByCode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCode, opts...).ToFunc()
 }
 
 // ByName orders the results by the name field.

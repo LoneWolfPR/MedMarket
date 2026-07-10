@@ -28,6 +28,20 @@ func (_u *PharmacyUpdate) Where(ps ...predicate.Pharmacy) *PharmacyUpdate {
 	return _u
 }
 
+// SetCode sets the "code" field.
+func (_u *PharmacyUpdate) SetCode(v string) *PharmacyUpdate {
+	_u.mutation.SetCode(v)
+	return _u
+}
+
+// SetNillableCode sets the "code" field if the given value is not nil.
+func (_u *PharmacyUpdate) SetNillableCode(v *string) *PharmacyUpdate {
+	if v != nil {
+		_u.SetCode(*v)
+	}
+	return _u
+}
+
 // SetName sets the "name" field.
 func (_u *PharmacyUpdate) SetName(v string) *PharmacyUpdate {
 	_u.mutation.SetName(v)
@@ -223,6 +237,11 @@ func (_u *PharmacyUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *PharmacyUpdate) check() error {
+	if v, ok := _u.mutation.Code(); ok {
+		if err := pharmacy.CodeValidator(v); err != nil {
+			return &ValidationError{Name: "code", err: fmt.Errorf(`ent: validator failed for field "Pharmacy.code": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Name(); ok {
 		if err := pharmacy.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Pharmacy.name": %w`, err)}
@@ -283,6 +302,9 @@ func (_u *PharmacyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
+	if value, ok := _u.mutation.Code(); ok {
+		_spec.SetField(pharmacy.FieldCode, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(pharmacy.FieldName, field.TypeString, value)
 	}
@@ -337,6 +359,20 @@ type PharmacyUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *PharmacyMutation
+}
+
+// SetCode sets the "code" field.
+func (_u *PharmacyUpdateOne) SetCode(v string) *PharmacyUpdateOne {
+	_u.mutation.SetCode(v)
+	return _u
+}
+
+// SetNillableCode sets the "code" field if the given value is not nil.
+func (_u *PharmacyUpdateOne) SetNillableCode(v *string) *PharmacyUpdateOne {
+	if v != nil {
+		_u.SetCode(*v)
+	}
+	return _u
 }
 
 // SetName sets the "name" field.
@@ -547,6 +583,11 @@ func (_u *PharmacyUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *PharmacyUpdateOne) check() error {
+	if v, ok := _u.mutation.Code(); ok {
+		if err := pharmacy.CodeValidator(v); err != nil {
+			return &ValidationError{Name: "code", err: fmt.Errorf(`ent: validator failed for field "Pharmacy.code": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Name(); ok {
 		if err := pharmacy.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Pharmacy.name": %w`, err)}
@@ -623,6 +664,9 @@ func (_u *PharmacyUpdateOne) sqlSave(ctx context.Context) (_node *Pharmacy, err 
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.Code(); ok {
+		_spec.SetField(pharmacy.FieldCode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(pharmacy.FieldName, field.TypeString, value)

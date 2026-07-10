@@ -21,6 +21,12 @@ type PharmacyCreate struct {
 	hooks    []Hook
 }
 
+// SetCode sets the "code" field.
+func (_c *PharmacyCreate) SetCode(v string) *PharmacyCreate {
+	_c.mutation.SetCode(v)
+	return _c
+}
+
 // SetName sets the "name" field.
 func (_c *PharmacyCreate) SetName(v string) *PharmacyCreate {
 	_c.mutation.SetName(v)
@@ -182,6 +188,14 @@ func (_c *PharmacyCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *PharmacyCreate) check() error {
+	if _, ok := _c.mutation.Code(); !ok {
+		return &ValidationError{Name: "code", err: errors.New(`ent: missing required field "Pharmacy.code"`)}
+	}
+	if v, ok := _c.mutation.Code(); ok {
+		if err := pharmacy.CodeValidator(v); err != nil {
+			return &ValidationError{Name: "code", err: fmt.Errorf(`ent: validator failed for field "Pharmacy.code": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "Pharmacy.name"`)}
 	}
@@ -288,6 +302,10 @@ func (_c *PharmacyCreate) createSpec() (*Pharmacy, *sqlgraph.CreateSpec) {
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = &id
+	}
+	if value, ok := _c.mutation.Code(); ok {
+		_spec.SetField(pharmacy.FieldCode, field.TypeString, value)
+		_node.Code = value
 	}
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(pharmacy.FieldName, field.TypeString, value)

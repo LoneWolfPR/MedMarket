@@ -19,5 +19,6 @@ var (
 type PharmacyRepository interface {
 	Create(ctx context.Context, p *pharmacy.Pharmacy) (*pharmacy.Pharmacy, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*pharmacy.Pharmacy, error)
+	GetByCode(ctx context.Context, code string) (*pharmacy.Pharmacy, error)
 	List(ctx context.Context) ([]pharmacy.Pharmacy, error)
 }

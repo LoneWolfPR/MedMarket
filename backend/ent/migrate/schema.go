@@ -11,6 +11,7 @@ var (
 	// PharmaciesColumns holds the columns for the "pharmacies" table.
 	PharmaciesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID, Default: schema.Expr("gen_random_uuid()")},
+		{Name: "code", Type: field.TypeString, Unique: true},
 		{Name: "name", Type: field.TypeString},
 		{Name: "contact_phone", Type: field.TypeString},
 		{Name: "npi", Type: field.TypeString, Unique: true},

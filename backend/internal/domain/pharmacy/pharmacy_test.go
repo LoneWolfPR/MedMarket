@@ -26,6 +26,7 @@ func validPharmacyParams(t *testing.T) pharmacy.NewPharmacyParams {
 	require.NoError(t, err)
 
 	return pharmacy.NewPharmacyParams{
+		Code: "test-pharmacy",
 		Name: "Test Pharmacy",
 		Address: shared.Address{
 			Street1: "123 Main St",
@@ -47,6 +48,7 @@ func TestNewPharmacy_Valid(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, got)
+	assert.Equal(t, p.Code, got.Code)
 	assert.Equal(t, p.Name, got.Name)
 	assert.Equal(t, p.Address, got.Address)
 	assert.Equal(t, p.ContactPhone, got.ContactPhone)
@@ -61,6 +63,10 @@ func TestNewPharmacy_Invalid(t *testing.T) {
 		mutate  func(p *pharmacy.NewPharmacyParams)
 		wantErr error
 	}{
+		"missing code": {
+			mutate:  func(p *pharmacy.NewPharmacyParams) { p.Code = "" },
+			wantErr: pharmacy.ErrMissingCode,
+		},
 		"missing name": {
 			mutate:  func(p *pharmacy.NewPharmacyParams) { p.Name = "" },
 			wantErr: pharmacy.ErrMissingName,
