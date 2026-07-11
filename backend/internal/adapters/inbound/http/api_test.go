@@ -17,6 +17,7 @@ import (
 
 	httpapi "github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http/openapi"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/inbound"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
@@ -67,7 +68,7 @@ func newStack(t *testing.T, svc inbound.UserService, ti outbound.TokenIssuer) ht
 func buildUser(t *testing.T) *user.User {
 	t.Helper()
 
-	e, err := user.NewEmail("jane@example.com")
+	e, err := shared.NewEmail("jane@example.com")
 	require.NoError(t, err)
 	h, err := user.NewPasswordHash(validHash)
 	require.NoError(t, err)

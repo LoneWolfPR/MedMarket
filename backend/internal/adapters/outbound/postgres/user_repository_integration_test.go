@@ -72,7 +72,7 @@ func setupRepo(t *testing.T) *postgres.UserRepository {
 func newDomainUser(t *testing.T, email string) *user.User {
 	t.Helper()
 
-	e, err := user.NewEmail(email)
+	e, err := shared.NewEmail(email)
 	require.NoError(t, err)
 	h, err := user.NewPasswordHash(validHash)
 	require.NoError(t, err)
@@ -128,7 +128,7 @@ func TestUserRepository(t *testing.T) {
 	})
 
 	t.Run("GetByEmail returns ErrUserNotFound for an unknown email", func(t *testing.T) {
-		email, err := user.NewEmail("nobody@example.com")
+		email, err := shared.NewEmail("nobody@example.com")
 		require.NoError(t, err)
 
 		got, err := repo.GetByEmail(ctx, email)
@@ -148,7 +148,7 @@ func TestUserRepository(t *testing.T) {
 	})
 
 	t.Run("empty optional fields round-trip as zero values", func(t *testing.T) {
-		e, err := user.NewEmail("minimal@example.com")
+		e, err := shared.NewEmail("minimal@example.com")
 		require.NoError(t, err)
 		h, err := user.NewPasswordHash(validHash)
 		require.NoError(t, err)

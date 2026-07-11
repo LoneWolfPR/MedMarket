@@ -9,5 +9,8 @@ import (
 // Pharmacy is the predicate function for pharmacy builders.
 type Pharmacy func(*sql.Selector)
 
+// Prescription is the predicate function for prescription builders.
+type Prescription func(*sql.Selector)
+
 // User is the predicate function for user builders.
 type User func(*sql.Selector)

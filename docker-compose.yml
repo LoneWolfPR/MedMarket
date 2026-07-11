@@ -33,6 +33,18 @@ services:
       - PHARMACY_A_SECRET=pharmacy-a-dev-key
       - PHARMACY_B_BASE_URL=http://mock-pharmacy-b:8080
       - PHARMACY_B_SECRET=pharmacy-b-dev-token
+      # MinIO (S3-compatible) — in-container endpoint is the service name on the
+      # API port 9000; console (9001) is host-inspection only.
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=medmarket
+      - MINIO_SECRET_KEY=medmarket-dev-secret
+      - MINIO_BUCKET=prescriptions
+      - MINIO_USE_SSL=false
+      # Mailpit SMTP — the SMTP adapter dials this; the web UI (8025) is
+      # host-inspection only.
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - SMTP_FROM=no-reply@medmarket.local
     labels:
       - "traefik.enable=true"
       # PathPrefix(/api) is longer than the frontend's PathPrefix(/), so Traefik
@@ -45,6 +57,12 @@ services:
       # main.go pings with a fail-fast 5s timeout and exits on refusal.
       postgres:
         condition: service_healthy
+      # Wait until the prescriptions bucket exists so the MinIO adapter's
+      # startup bucket check can't race the one-shot creator.
+      minio-init:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
     networks:
       - medmarket
 
@@ -114,6 +132,61 @@ services:
     networks:
       - medmarket
 
+  # MinIO — S3-compatible object storage for prescription documents. The backend
+  # talks to the S3 API over the network at http://minio:9000; the console (9001)
+  # is routed through Traefik for host inspection (Host rule, like the mocks) at
+  # http://minio.localhost. Curl the console via: -H "Host: minio.localhost".
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=medmarket
+      - MINIO_ROOT_PASSWORD=medmarket-dev-secret
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    volumes:
+      - minio-data:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minio.rule=Host(`minio.localhost`)"
+      - "traefik.http.routers.minio.entrypoints=web"
+      - "traefik.http.services.minio.loadbalancer.server.port=9001"
+    networks:
+      - medmarket
+
+  # One-shot: create the prescriptions bucket once MinIO is healthy, then exit.
+  # The official minio image doesn't auto-create buckets, so we use the mc client.
+  # --ignore-existing keeps it idempotent across restarts.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 medmarket medmarket-dev-secret &&
+      mc mb --ignore-existing local/prescriptions
+      "
+    networks:
+      - medmarket
+
+  # Mailpit — captures all outbound SMTP locally. The SMTP adapter dials
+  # mailpit:1025; the web UI (8025) is routed through Traefik for inspection at
+  # http://mail.localhost. Curl via: -H "Host: mail.localhost".
+  mailpit:
+    image: axllent/mailpit:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mailpit.rule=Host(`mail.localhost`)"
+      - "traefik.http.routers.mailpit.entrypoints=web"
+      - "traefik.http.services.mailpit.loadbalancer.server.port=8025"
+    networks:
+      - medmarket
+
   postgres:
     image: postgres:17
     environment:
@@ -137,6 +210,7 @@ services:
 
 volumes:
   postgres-data:
+  minio-data:
 
 networks:
   medmarket:

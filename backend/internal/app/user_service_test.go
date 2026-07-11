@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LoneWolfPR/MedMarket/backend/internal/app"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/inbound"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
@@ -61,7 +62,7 @@ func regInput(mutate func(in *inbound.RegisterInput)) inbound.RegisterInput {
 func makeStoredUser(t *testing.T, email string) *user.User {
 	t.Helper()
 
-	e, err := user.NewEmail(email)
+	e, err := shared.NewEmail(email)
 	require.NoError(t, err)
 	h, err := user.NewPasswordHash(validHash)
 	require.NoError(t, err)
@@ -229,7 +230,7 @@ func TestLogin_Success(t *testing.T) {
 	stored := makeStoredUser(t, "jane@example.com")
 
 	repo := fakeUserRepo{
-		getByEmailFn: func(_ context.Context, _ user.Email) (*user.User, error) { return stored, nil },
+		getByEmailFn: func(_ context.Context, _ shared.Email) (*user.User, error) { return stored, nil },
 	}
 	hasher := fakePasswordHasher{
 		compareFn: func(hash, plain string) error {
@@ -260,7 +261,7 @@ func TestLogin_NormalizesErrors(t *testing.T) {
 	stored := makeStoredUser(t, "jane@example.com")
 	okCompare := fakePasswordHasher{compareFn: func(string, string) error { return nil }}
 	foundRepo := fakeUserRepo{
-		getByEmailFn: func(context.Context, user.Email) (*user.User, error) { return stored, nil },
+		getByEmailFn: func(context.Context, shared.Email) (*user.User, error) { return stored, nil },
 	}
 
 	tests := map[string]struct {
@@ -276,7 +277,7 @@ func TestLogin_NormalizesErrors(t *testing.T) {
 		},
 		"unknown user": {
 			email: "jane@example.com",
-			repo: fakeUserRepo{getByEmailFn: func(context.Context, user.Email) (*user.User, error) {
+			repo: fakeUserRepo{getByEmailFn: func(context.Context, shared.Email) (*user.User, error) {
 				return nil, outbound.ErrUserNotFound
 			}},
 			wantErr: inbound.ErrInvalidCredentials,
@@ -289,7 +290,7 @@ func TestLogin_NormalizesErrors(t *testing.T) {
 		},
 		"repository lookup failure is generic": {
 			email: "jane@example.com",
-			repo: fakeUserRepo{getByEmailFn: func(context.Context, user.Email) (*user.User, error) {
+			repo: fakeUserRepo{getByEmailFn: func(context.Context, shared.Email) (*user.User, error) {
 				return nil, errBoom
 			}},
 			wantErr: nil,

@@ -57,7 +57,7 @@ func newHandler(t *testing.T, svc inbound.UserService) *AuthHandler {
 func makeUser(t *testing.T) *user.User {
 	t.Helper()
 
-	e, err := user.NewEmail("jane@example.com")
+	e, err := shared.NewEmail("jane@example.com")
 	require.NoError(t, err)
 	h, err := user.NewPasswordHash(validHash)
 	require.NoError(t, err)

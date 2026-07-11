@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
 )
 
@@ -15,7 +16,7 @@ import (
 type fakeUserRepo struct {
 	createFn     func(ctx context.Context, u *user.User) (*user.User, error)
 	getByIDFn    func(ctx context.Context, id uuid.UUID) (*user.User, error)
-	getByEmailFn func(ctx context.Context, email user.Email) (*user.User, error)
+	getByEmailFn func(ctx context.Context, email shared.Email) (*user.User, error)
 }
 
 func (f fakeUserRepo) Create(ctx context.Context, u *user.User) (*user.User, error) {
@@ -26,7 +27,7 @@ func (f fakeUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*user.User, er
 	return f.getByIDFn(ctx, id)
 }
 
-func (f fakeUserRepo) GetByEmail(ctx context.Context, email user.Email) (*user.User, error) {
+func (f fakeUserRepo) GetByEmail(ctx context.Context, email shared.Email) (*user.User, error) {
 	return f.getByEmailFn(ctx, email)
 }
 

@@ -64,7 +64,7 @@ func NewUserService(p NewUserServiceParams) (*UserService, error) {
 // Register takes incoming user information and uses the UserRepository adapter to create
 // a new user record
 func (s *UserService) Register(ctx context.Context, input inbound.RegisterInput) (*user.User, error) {
-	emailAddress, err := user.NewEmail(input.Email)
+	emailAddress, err := shared.NewEmail(input.Email)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", inbound.ErrValidation, err)
 	}
@@ -108,7 +108,7 @@ func (s *UserService) Register(ctx context.Context, input inbound.RegisterInput)
 // Login takes a provided email and password, fetches a profile by email, and validates the
 // password that is provided against the hash returned
 func (s *UserService) Login(ctx context.Context, email, password string) (string, error) {
-	userEmail, err := user.NewEmail(email)
+	userEmail, err := shared.NewEmail(email)
 	if err != nil {
 		return "", inbound.ErrInvalidCredentials
 	}

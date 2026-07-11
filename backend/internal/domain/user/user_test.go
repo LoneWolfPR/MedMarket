@@ -16,7 +16,7 @@ import (
 func validParams(t *testing.T) user.NewUserParams {
 	t.Helper()
 
-	email, err := user.NewEmail("jane@example.com")
+	email, err := shared.NewEmail("jane@example.com")
 	require.NoError(t, err)
 
 	hash, err := user.NewPasswordHash("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
@@ -91,7 +91,7 @@ func TestNewUser_Invalid(t *testing.T) {
 			wantErr: user.ErrMissingLastName,
 		},
 		"zero email": {
-			mutate:  func(p *user.NewUserParams) { p.Email = user.Email{} },
+			mutate:  func(p *user.NewUserParams) { p.Email = shared.Email{} },
 			wantErr: user.ErrMissingEmail,
 		},
 		"zero password hash": {

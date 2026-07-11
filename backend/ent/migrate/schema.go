@@ -31,6 +31,32 @@ var (
 		Columns:    PharmaciesColumns,
 		PrimaryKey: []*schema.Column{PharmaciesColumns[0]},
 	}
+	// PrescriptionsColumns holds the columns for the "prescriptions" table.
+	PrescriptionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID, Default: schema.Expr("gen_random_uuid()")},
+		{Name: "user_id", Type: field.TypeUUID},
+		{Name: "document_key", Type: field.TypeString},
+		{Name: "physician_name", Type: field.TypeString},
+		{Name: "med_name", Type: field.TypeString},
+		{Name: "med_strength_value", Type: field.TypeString},
+		{Name: "med_strength_unit", Type: field.TypeString},
+		{Name: "quantity", Type: field.TypeInt},
+		{Name: "created_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+	}
+	// PrescriptionsTable holds the schema information for the "prescriptions" table.
+	PrescriptionsTable = &schema.Table{
+		Name:       "prescriptions",
+		Columns:    PrescriptionsColumns,
+		PrimaryKey: []*schema.Column{PrescriptionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "prescription_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{PrescriptionsColumns[1]},
+			},
+		},
+	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID, Default: schema.Expr("gen_random_uuid()")},
@@ -56,6 +82,7 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		PharmaciesTable,
+		PrescriptionsTable,
 		UsersTable,
 	}
 )

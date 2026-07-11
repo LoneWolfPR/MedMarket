@@ -60,7 +60,7 @@ func TestMapToOAPIAddress(t *testing.T) {
 // TestToUserResponse_OmitsEmptyOptionals verifies the optional-field convention:
 // an empty phone and a zero address are omitted (nil) in the response DTO.
 func TestToUserResponse_OmitsEmptyOptionals(t *testing.T) {
-	email, err := user.NewEmail("jane@example.com")
+	email, err := shared.NewEmail("jane@example.com")
 	require.NoError(t, err)
 	u := &user.User{ID: uuid.New(), Email: email, FirstName: "Jane", LastName: "Doe"} // no phone, zero address
 

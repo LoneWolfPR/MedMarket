@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/LoneWolfPR/MedMarket/backend/ent/pharmacy"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/prescription"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/schema"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/user"
 	"github.com/google/uuid"
@@ -71,6 +72,46 @@ func init() {
 	pharmacyDescID := pharmacyFields[0].Descriptor()
 	// pharmacy.DefaultID holds the default value on creation for the id field.
 	pharmacy.DefaultID = pharmacyDescID.Default.(func() uuid.UUID)
+	prescriptionFields := schema.Prescription{}.Fields()
+	_ = prescriptionFields
+	// prescriptionDescDocumentKey is the schema descriptor for document_key field.
+	prescriptionDescDocumentKey := prescriptionFields[2].Descriptor()
+	// prescription.DocumentKeyValidator is a validator for the "document_key" field. It is called by the builders before save.
+	prescription.DocumentKeyValidator = prescriptionDescDocumentKey.Validators[0].(func(string) error)
+	// prescriptionDescPhysicianName is the schema descriptor for physician_name field.
+	prescriptionDescPhysicianName := prescriptionFields[3].Descriptor()
+	// prescription.PhysicianNameValidator is a validator for the "physician_name" field. It is called by the builders before save.
+	prescription.PhysicianNameValidator = prescriptionDescPhysicianName.Validators[0].(func(string) error)
+	// prescriptionDescMedName is the schema descriptor for med_name field.
+	prescriptionDescMedName := prescriptionFields[4].Descriptor()
+	// prescription.MedNameValidator is a validator for the "med_name" field. It is called by the builders before save.
+	prescription.MedNameValidator = prescriptionDescMedName.Validators[0].(func(string) error)
+	// prescriptionDescMedStrengthValue is the schema descriptor for med_strength_value field.
+	prescriptionDescMedStrengthValue := prescriptionFields[5].Descriptor()
+	// prescription.MedStrengthValueValidator is a validator for the "med_strength_value" field. It is called by the builders before save.
+	prescription.MedStrengthValueValidator = prescriptionDescMedStrengthValue.Validators[0].(func(string) error)
+	// prescriptionDescMedStrengthUnit is the schema descriptor for med_strength_unit field.
+	prescriptionDescMedStrengthUnit := prescriptionFields[6].Descriptor()
+	// prescription.MedStrengthUnitValidator is a validator for the "med_strength_unit" field. It is called by the builders before save.
+	prescription.MedStrengthUnitValidator = prescriptionDescMedStrengthUnit.Validators[0].(func(string) error)
+	// prescriptionDescQuantity is the schema descriptor for quantity field.
+	prescriptionDescQuantity := prescriptionFields[7].Descriptor()
+	// prescription.QuantityValidator is a validator for the "quantity" field. It is called by the builders before save.
+	prescription.QuantityValidator = prescriptionDescQuantity.Validators[0].(func(int) error)
+	// prescriptionDescCreatedAt is the schema descriptor for created_at field.
+	prescriptionDescCreatedAt := prescriptionFields[8].Descriptor()
+	// prescription.DefaultCreatedAt holds the default value on creation for the created_at field.
+	prescription.DefaultCreatedAt = prescriptionDescCreatedAt.Default.(func() time.Time)
+	// prescriptionDescUpdatedAt is the schema descriptor for updated_at field.
+	prescriptionDescUpdatedAt := prescriptionFields[9].Descriptor()
+	// prescription.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	prescription.DefaultUpdatedAt = prescriptionDescUpdatedAt.Default.(func() time.Time)
+	// prescription.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	prescription.UpdateDefaultUpdatedAt = prescriptionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// prescriptionDescID is the schema descriptor for id field.
+	prescriptionDescID := prescriptionFields[0].Descriptor()
+	// prescription.DefaultID holds the default value on creation for the id field.
+	prescription.DefaultID = prescriptionDescID.Default.(func() uuid.UUID)
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescEmail is the schema descriptor for email field.

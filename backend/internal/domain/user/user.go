@@ -21,7 +21,7 @@ var (
 // User represents a user's profile information
 type User struct {
 	ID           uuid.UUID
-	Email        Email
+	Email        shared.Email
 	PasswordHash PasswordHash
 	FirstName    string
 	LastName     string
@@ -32,7 +32,7 @@ type User struct {
 // NewUserParams contains the parameters an outside package needs to create
 // a new instance of a user
 type NewUserParams struct {
-	Email        Email
+	Email        shared.Email
 	PasswordHash PasswordHash
 	FirstName    string
 	LastName     string

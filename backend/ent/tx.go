@@ -14,6 +14,8 @@ type Tx struct {
 	config
 	// Pharmacy is the client for interacting with the Pharmacy builders.
 	Pharmacy *PharmacyClient
+	// Prescription is the client for interacting with the Prescription builders.
+	Prescription *PrescriptionClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 
@@ -148,6 +150,7 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.Pharmacy = NewPharmacyClient(tx.config)
+	tx.Prescription = NewPrescriptionClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 }
 

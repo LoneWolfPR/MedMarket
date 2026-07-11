@@ -1,4 +1,4 @@
-package user_test
+package shared_test
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 )
 
 func TestNewEmail_Valid(t *testing.T) {
@@ -23,7 +23,7 @@ func TestNewEmail_Valid(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := user.NewEmail(tc.raw)
+			got, err := shared.NewEmail(tc.raw)
 
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got.String())
@@ -46,9 +46,9 @@ func TestNewEmail_Invalid(t *testing.T) {
 
 	for name, raw := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := user.NewEmail(raw)
+			got, err := shared.NewEmail(raw)
 
-			require.ErrorIs(t, err, user.ErrInvalidEmail)
+			require.ErrorIs(t, err, shared.ErrInvalidEmail)
 			assert.True(t, got.IsZero(), "expected zero Email on error")
 		})
 	}
@@ -56,7 +56,7 @@ func TestNewEmail_Invalid(t *testing.T) {
 
 // TestEmailZeroValue documents that the zero Email is IsZero and stringifies empty.
 func TestEmailZeroValue(t *testing.T) {
-	var e user.Email
+	var e shared.Email
 
 	assert.True(t, e.IsZero())
 	assert.Empty(t, e.String())

@@ -91,7 +91,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User,
 }
 
 // GetByEmail fetches a user record by the supplied email address
-func (r *UserRepository) GetByEmail(ctx context.Context, email user.Email) (*user.User, error) {
+func (r *UserRepository) GetByEmail(ctx context.Context, email shared.Email) (*user.User, error) {
 	userRecord, err := r.client.User.Query().
 		Where(entuser.EmailEQ(email.String())).
 		Only(ctx)
@@ -106,7 +106,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email user.Email) (*use
 }
 
 func mapToDomainUser(userRecord *ent.User) (*user.User, error) {
-	userEmail, err := user.NewEmail(userRecord.Email)
+	userEmail, err := shared.NewEmail(userRecord.Email)
 	if err != nil {
 		return nil, fmt.Errorf("error with the email address on file: %w", err)
 	}
