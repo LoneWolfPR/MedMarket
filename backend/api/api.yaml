@@ -73,6 +73,66 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /api/prescriptions/upload:
+    post:
+      operationId: uploadPrescription
+      summary: Upload a prescription document and its metadata
+      tags: [prescriptions]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [document, physicianName, medName, strengthValue, strengthUnit, quantity]
+              properties:
+                document:
+                  type: string
+                  format: binary
+                  description: The prescription document (image or PDF)
+                physicianName:
+                  type: string
+                medName:
+                  type: string
+                strengthValue:
+                  type: string
+                strengthUnit:
+                  type: string
+                quantity:
+                  type: integer
+      responses:
+        '201':
+          description: Prescription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrescriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/prescriptions:
+    get:
+      operationId: listPrescriptions
+      summary: List the authenticated user's prescriptions
+      tags: [prescriptions]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The user's prescriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrescriptionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -168,6 +228,27 @@ components:
           type: string
         address:
           $ref: '#/components/schemas/Address'
+
+    PrescriptionResponse:
+      type: object
+      required: [id, physicianName, medName, strengthValue, strengthUnit, quantity, documentUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        physicianName:
+          type: string
+        medName:
+          type: string
+        strengthValue:
+          type: string
+        strengthUnit:
+          type: string
+        quantity:
+          type: integer
+        documentUrl:
+          type: string
+          description: Short-lived presigned URL to the uploaded document
 
     Error:
       type: object

@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"path"
@@ -45,6 +46,18 @@ type Error struct {
 type LoginRequest struct {
 	Email    openapi_types.Email `json:"email"`
 	Password string              `json:"password"`
+}
+
+// PrescriptionResponse defines model for PrescriptionResponse.
+type PrescriptionResponse struct {
+	// DocumentUrl Short-lived presigned URL to the uploaded document
+	DocumentUrl   string             `json:"documentUrl"`
+	Id            openapi_types.UUID `json:"id"`
+	MedName       string             `json:"medName"`
+	PhysicianName string             `json:"physicianName"`
+	Quantity      int                `json:"quantity"`
+	StrengthUnit  string             `json:"strengthUnit"`
+	StrengthValue string             `json:"strengthValue"`
 }
 
 // RegisterRequest defines model for RegisterRequest.
@@ -81,11 +94,25 @@ type Unauthorized = Error
 // bearerAuthContextKey is the context key for bearerAuth security scheme
 type bearerAuthContextKey string
 
+// UploadPrescriptionMultipartBody defines parameters for UploadPrescription.
+type UploadPrescriptionMultipartBody struct {
+	// Document The prescription document (image or PDF)
+	Document      openapi_types.File `json:"document"`
+	MedName       string             `json:"medName"`
+	PhysicianName string             `json:"physicianName"`
+	Quantity      int                `json:"quantity"`
+	StrengthUnit  string             `json:"strengthUnit"`
+	StrengthValue string             `json:"strengthValue"`
+}
+
 // LoginUserJSONRequestBody defines body for LoginUser for application/json ContentType.
 type LoginUserJSONRequestBody = LoginRequest
 
 // RegisterUserJSONRequestBody defines body for RegisterUser for application/json ContentType.
 type RegisterUserJSONRequestBody = RegisterRequest
+
+// UploadPrescriptionMultipartRequestBody defines body for UploadPrescription for multipart/form-data ContentType.
+type UploadPrescriptionMultipartRequestBody UploadPrescriptionMultipartBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -98,6 +125,12 @@ type ServerInterface interface {
 	// Register a new user account
 	// (POST /api/auth/register)
 	RegisterUser(w http.ResponseWriter, r *http.Request)
+	// List the authenticated user's prescriptions
+	// (GET /api/prescriptions)
+	ListPrescriptions(w http.ResponseWriter, r *http.Request)
+	// Upload a prescription document and its metadata
+	// (POST /api/prescriptions/upload)
+	UploadPrescription(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -148,6 +181,46 @@ func (siw *ServerInterfaceWrapper) RegisterUser(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RegisterUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPrescriptions operation middleware
+func (siw *ServerInterfaceWrapper) ListPrescriptions(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPrescriptions(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadPrescription operation middleware
+func (siw *ServerInterfaceWrapper) UploadPrescription(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadPrescription(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -280,6 +353,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/auth/login", wrapper.LoginUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/auth/profile", wrapper.GetProfile)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/auth/register", wrapper.RegisterUser)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/prescriptions", wrapper.ListPrescriptions)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prescriptions/upload", wrapper.UploadPrescription)
 
 	return m
 }
@@ -409,6 +484,91 @@ func (response RegisterUser409JSONResponse) VisitRegisterUserResponse(w http.Res
 	return err
 }
 
+type ListPrescriptionsRequestObject struct {
+}
+
+type ListPrescriptionsResponseObject interface {
+	VisitListPrescriptionsResponse(w http.ResponseWriter) error
+}
+
+type ListPrescriptions200JSONResponse []PrescriptionResponse
+
+func (response ListPrescriptions200JSONResponse) VisitListPrescriptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPrescriptions401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListPrescriptions401JSONResponse) VisitListPrescriptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadPrescriptionRequestObject struct {
+	Body *multipart.Reader
+}
+
+type UploadPrescriptionResponseObject interface {
+	VisitUploadPrescriptionResponse(w http.ResponseWriter) error
+}
+
+type UploadPrescription201JSONResponse PrescriptionResponse
+
+func (response UploadPrescription201JSONResponse) VisitUploadPrescriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadPrescription400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UploadPrescription400JSONResponse) VisitUploadPrescriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadPrescription401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UploadPrescription401JSONResponse) VisitUploadPrescriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Exchange credentials for a bearer token
@@ -420,6 +580,12 @@ type StrictServerInterface interface {
 	// Register a new user account
 	// (POST /api/auth/register)
 	RegisterUser(ctx context.Context, request RegisterUserRequestObject) (RegisterUserResponseObject, error)
+	// List the authenticated user's prescriptions
+	// (GET /api/prescriptions)
+	ListPrescriptions(ctx context.Context, request ListPrescriptionsRequestObject) (ListPrescriptionsResponseObject, error)
+	// Upload a prescription document and its metadata
+	// (POST /api/prescriptions/upload)
+	UploadPrescription(ctx context.Context, request UploadPrescriptionRequestObject) (UploadPrescriptionResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -537,25 +703,85 @@ func (sh *strictHandler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ListPrescriptions operation middleware
+func (sh *strictHandler) ListPrescriptions(w http.ResponseWriter, r *http.Request) {
+	var request ListPrescriptionsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPrescriptions(ctx, request.(ListPrescriptionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPrescriptions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPrescriptionsResponseObject); ok {
+		if err := validResponse.VisitListPrescriptionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadPrescription operation middleware
+func (sh *strictHandler) UploadPrescription(w http.ResponseWriter, r *http.Request) {
+	var request UploadPrescriptionRequestObject
+
+	if reader, err := r.MultipartReader(); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode multipart body: %w", err))
+		return
+	} else {
+		request.Body = reader
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadPrescription(ctx, request.(UploadPrescriptionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadPrescription")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadPrescriptionResponseObject); ok {
+		if err := validResponse.VisitUploadPrescriptionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"0svb5T8BAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

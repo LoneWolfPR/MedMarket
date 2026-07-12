@@ -54,3 +54,13 @@ func (ms MedStrength) IsZero() bool {
 func (ms MedStrength) String() string {
 	return ms.value + ms.unit
 }
+
+// Value is a getter
+func (ms MedStrength) Value() string {
+	return ms.value
+}
+
+// Unit is a getter
+func (ms MedStrength) Unit() string {
+	return ms.unit
+}
