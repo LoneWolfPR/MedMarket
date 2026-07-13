@@ -2,9 +2,11 @@ package app_test
 
 import (
 	"context"
+	"io"
 
 	"github.com/google/uuid"
 
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/prescription"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
 )
@@ -48,3 +50,40 @@ type fakeTokenIssuer struct {
 
 func (f fakeTokenIssuer) Issue(userID uuid.UUID) (string, error) { return f.issueFn(userID) }
 func (f fakeTokenIssuer) Verify(token string) (uuid.UUID, error) { return f.verifyFn(token) }
+
+type fakePrescriptionRepo struct {
+	createFn  func(ctx context.Context, p *prescription.Prescription) (*prescription.Prescription, error)
+	getByIDFn func(ctx context.Context, id uuid.UUID) (*prescription.Prescription, error)
+	listFn    func(ctx context.Context, userID uuid.UUID) ([]prescription.Prescription, error)
+}
+
+func (f fakePrescriptionRepo) Create(
+	ctx context.Context, p *prescription.Prescription,
+) (*prescription.Prescription, error) {
+	return f.createFn(ctx, p)
+}
+
+func (f fakePrescriptionRepo) GetByID(
+	ctx context.Context, id uuid.UUID,
+) (*prescription.Prescription, error) {
+	return f.getByIDFn(ctx, id)
+}
+
+func (f fakePrescriptionRepo) List(
+	ctx context.Context, userID uuid.UUID,
+) ([]prescription.Prescription, error) {
+	return f.listFn(ctx, userID)
+}
+
+type fakeFileStorage struct {
+	putFn     func(ctx context.Context, key, contentType string, reader io.Reader) error
+	presignFn func(ctx context.Context, key string) (string, error)
+}
+
+func (f fakeFileStorage) Put(ctx context.Context, key, contentType string, reader io.Reader) error {
+	return f.putFn(ctx, key, contentType, reader)
+}
+
+func (f fakeFileStorage) GetPresignedURL(ctx context.Context, key string) (string, error) {
+	return f.presignFn(ctx, key)
+}

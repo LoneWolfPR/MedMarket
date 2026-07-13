@@ -16,5 +16,5 @@ var ErrPrescriptionNotFound = errors.New("prescription not found")
 type PrescriptionRepository interface {
 	Create(ctx context.Context, p *prescription.Prescription) (*prescription.Prescription, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*prescription.Prescription, error)
-	List(ctx context.Context, id uuid.UUID) ([]prescription.Prescription, error)
+	List(ctx context.Context, userID uuid.UUID) ([]prescription.Prescription, error)
 }

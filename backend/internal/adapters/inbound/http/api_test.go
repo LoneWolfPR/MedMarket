@@ -52,16 +52,49 @@ type stubIssuer struct {
 func (s stubIssuer) Issue(uuid.UUID) (string, error)        { return "", nil }
 func (s stubIssuer) Verify(token string) (uuid.UUID, error) { return s.verifyFn(token) }
 
+// stubPrescriptionService satisfies inbound.PrescriptionService so NewAPI can be
+// assembled. These tests exercise only the auth routes, so the methods return
+// zero values and are never invoked.
+type stubPrescriptionService struct{}
+
+func (stubPrescriptionService) Upload(
+	context.Context, inbound.PrescriptionInput,
+) (inbound.PrescriptionView, error) {
+	return inbound.PrescriptionView{}, nil
+}
+func (stubPrescriptionService) GetPrescription(
+	context.Context, uuid.UUID, uuid.UUID,
+) (inbound.PrescriptionView, error) {
+	return inbound.PrescriptionView{}, nil
+}
+func (stubPrescriptionService) GetPrescriptionList(
+	context.Context, uuid.UUID,
+) ([]inbound.PrescriptionView, error) {
+	return nil, nil
+}
+
 // newStack assembles the real HTTP stack (handler -> NewAPI -> mux) the same way
 // main.go does, so tests exercise the actual routing, middleware, and error policy.
 func newStack(t *testing.T, svc inbound.UserService, ti outbound.TokenIssuer) http.Handler {
 	t.Helper()
 
-	h, err := httpapi.NewAuthHandler(httpapi.NewAuthHandlerParams{Logger: slog.New(slog.DiscardHandler), Svc: svc})
+	logger := slog.New(slog.DiscardHandler)
+	h, err := httpapi.NewAuthHandler(httpapi.NewAuthHandlerParams{Logger: logger, Svc: svc})
+	require.NoError(t, err)
+
+	ph, err := httpapi.NewPrescriptionHandler(httpapi.NewPrescriptionHandlerParams{
+		Logger: logger,
+		Svc:    stubPrescriptionService{},
+	})
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	openapi.HandlerFromMux(httpapi.NewAPI(h, ti), mux)
+	openapi.HandlerFromMux(httpapi.NewAPI(httpapi.NewAPIParams{
+		Auth:         h,
+		Prescription: ph,
+		Logger:       logger,
+		TokenIssuer:  ti,
+	}), mux)
 	return mux
 }
 

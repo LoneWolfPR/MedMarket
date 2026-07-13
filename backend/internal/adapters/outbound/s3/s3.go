@@ -16,26 +16,31 @@ import (
 
 // S3 is the type for our s3 based file storage adapter
 type S3 struct {
-	client     *minio.Client
-	bucket     string
-	presignTTL time.Duration
-	logger     *slog.Logger
+	client        *minio.Client
+	presignClient *minio.Client
+	bucket        string
+	presignTTL    time.Duration
+	logger        *slog.Logger
 }
 
 var _ outbound.FileStorage = (*S3)(nil)
 
 // NewS3Params holds the params necessary to construct an S3 instance
 type NewS3Params struct {
-	Client     *minio.Client
-	Bucket     string
-	PresignTTL time.Duration
-	Logger     *slog.Logger
+	Client        *minio.Client
+	PresignClient *minio.Client
+	Bucket        string
+	PresignTTL    time.Duration
+	Logger        *slog.Logger
 }
 
 // NewS3 is the constructor to build an S3 instance
 func NewS3(p NewS3Params) (*S3, error) {
 	if p.Client == nil {
 		return nil, errors.New("client is missing")
+	}
+	if p.PresignClient == nil {
+		return nil, errors.New("presign client is missing")
 	}
 	if p.Bucket == "" {
 		return nil, errors.New("bucket is missing")
@@ -45,17 +50,18 @@ func NewS3(p NewS3Params) (*S3, error) {
 	}
 
 	return &S3{
-		client:     p.Client,
-		bucket:     p.Bucket,
-		presignTTL: p.PresignTTL,
-		logger:     p.Logger,
+		client:        p.Client,
+		presignClient: p.PresignClient,
+		bucket:        p.Bucket,
+		presignTTL:    p.PresignTTL,
+		logger:        p.Logger,
 	}, nil
 }
 
 // GetPresignedURL takes a file key and returns a secure, presigned url for
 // retrieving a file
 func (s *S3) GetPresignedURL(ctx context.Context, key string) (string, error) {
-	url, err := s.client.PresignedGetObject(
+	url, err := s.presignClient.PresignedGetObject(
 		ctx, s.bucket, key, s.presignTTL, nil,
 	)
 	if err != nil {

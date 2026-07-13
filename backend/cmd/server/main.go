@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/LoneWolfPR/MedMarket/backend/ent"
@@ -17,23 +18,35 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/bcrypt"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/jwt"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/postgres"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/s3"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/app"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 type config struct {
-	DatabaseURL      string
-	JWTSecret        []byte
-	JWTTTL           time.Duration
-	Port             string
-	PharmacyABaseURL string
-	PharmacyASecret  string
-	PharmacyBBaseURL string
-	PharmacyBSecret  string
+	DatabaseURL         string
+	JWTSecret           []byte
+	JWTTTL              time.Duration
+	Port                string
+	PharmacyABaseURL    string
+	PharmacyASecret     string
+	PharmacyBBaseURL    string
+	PharmacyBSecret     string
+	MinioEndpoint       string
+	MinioPublicEndpoint string
+	MinioRegion         string
+	MinioAccessKey      string
+	MinioSecretKey      string
+	MinioBucket         string
+	MinioUseSSL         bool
 }
+
+const presignTTL = 15 * time.Minute
 
 func loadConfig() (config, error) {
 	dbURL := os.Getenv(EnvDBURL)
@@ -77,15 +90,50 @@ func loadConfig() (config, error) {
 	if pharmBSecret == "" {
 		return config{}, fmt.Errorf("pharmacy b secret is missing")
 	}
+	minioEndpoint := os.Getenv(EnvMinioEndpoint)
+	if minioEndpoint == "" {
+		return config{}, fmt.Errorf("minio endpoint is missing")
+	}
+	minioPublicEndpoint := os.Getenv(EnvMinioPublicEndpoint)
+	if minioPublicEndpoint == "" {
+		return config{}, fmt.Errorf("minio public endpoint is missing")
+	}
+	minioRegion := os.Getenv(EnvMinioRegion)
+	if minioRegion == "" {
+		minioRegion = "us-east-1"
+	}
+	minioAccessKey := os.Getenv(EnvMinioAccessKey)
+	if minioAccessKey == "" {
+		return config{}, fmt.Errorf("minio access key is missing")
+	}
+	minioSecretKey := os.Getenv(EnvMinioSecretKey)
+	if minioSecretKey == "" {
+		return config{}, fmt.Errorf("minio secret key is missing")
+	}
+	minioBucket := os.Getenv(EnvMinioBucket)
+	if minioBucket == "" {
+		return config{}, fmt.Errorf("minio bucket is missing")
+	}
+	minioUseSSL, err := strconv.ParseBool(os.Getenv(EnvMinioUseSSL))
+	if err != nil {
+		return config{}, fmt.Errorf("error with minio use ssl: %w", err)
+	}
 	return config{
-		DatabaseURL:      dbURL,
-		JWTSecret:        []byte(jwtSecret),
-		JWTTTL:           jwtTTL,
-		Port:             port,
-		PharmacyABaseURL: pharmABaseURL,
-		PharmacyASecret:  pharmASecret,
-		PharmacyBBaseURL: pharmBBaseURL,
-		PharmacyBSecret:  pharmBSecret,
+		DatabaseURL:         dbURL,
+		JWTSecret:           []byte(jwtSecret),
+		JWTTTL:              jwtTTL,
+		Port:                port,
+		PharmacyABaseURL:    pharmABaseURL,
+		PharmacyASecret:     pharmASecret,
+		PharmacyBBaseURL:    pharmBBaseURL,
+		PharmacyBSecret:     pharmBSecret,
+		MinioEndpoint:       minioEndpoint,
+		MinioPublicEndpoint: minioPublicEndpoint,
+		MinioRegion:         minioRegion,
+		MinioAccessKey:      minioAccessKey,
+		MinioSecretKey:      minioSecretKey,
+		MinioBucket:         minioBucket,
+		MinioUseSSL:         minioUseSSL,
 	}, nil
 }
 
@@ -123,7 +171,44 @@ func run() error {
 			logger.Error("failed to close db client", "error", cerr)
 		}
 	}()
-
+	// Setup File Storage
+	minioClient, err := minio.New(cfg.MinioEndpoint, &minio.Options{
+		Creds: credentials.NewStaticV4(
+			cfg.MinioAccessKey, cfg.MinioSecretKey, "",
+		),
+		Secure: cfg.MinioUseSSL,
+	})
+	if err != nil {
+		return fmt.Errorf("error setting up minio client: %w", err)
+	}
+	minioPublicClient, err := minio.New(cfg.MinioPublicEndpoint, &minio.Options{
+		Creds: credentials.NewStaticV4(
+			cfg.MinioAccessKey, cfg.MinioSecretKey, "",
+		),
+		Region: cfg.MinioRegion,
+		Secure: false,
+	})
+	if err != nil {
+		return fmt.Errorf("error setting up public minio client: %w", err)
+	}
+	s3Client, err := s3.NewS3(s3.NewS3Params{
+		Client:        minioClient,
+		PresignClient: minioPublicClient,
+		Bucket:        cfg.MinioBucket,
+		PresignTTL:    presignTTL,
+		Logger:        logger,
+	})
+	if err != nil {
+		return fmt.Errorf("error setting up file storage: %w", err)
+	}
+	// Setup Prescription Repo
+	rxRepo, err := postgres.NewPrescriptionRepository(postgres.NewPrescriptionRepositoryParams{
+		Client: client,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("error creating prescription repo: %w", err)
+	}
 	// Setup seeding of pharmacy data
 	pharmacyRepo, err := postgres.NewPharmacyRepository(postgres.NewPharmacyRepositoryParams{
 		Client: client,
@@ -172,6 +257,14 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to set up user service: %w", err)
 	}
+	rxService, err := app.NewPrescriptionService(app.NewPrescriptionServiceParams{
+		Logger:           logger,
+		PrescriptionRepo: rxRepo,
+		FileStorage:      s3Client,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set up prescription service: %w", err)
+	}
 
 	// Inbound Adapters
 	authHandler, err := httpapi.NewAuthHandler(httpapi.NewAuthHandlerParams{
@@ -181,8 +274,20 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to setup auth handler: %w", err)
 	}
+	rxHandler, err := httpapi.NewPrescriptionHandler(httpapi.NewPrescriptionHandlerParams{
+		Logger: logger,
+		Svc:    rxService,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to setup prescription handler: %w", err)
+	}
 
-	api := httpapi.NewAPI(authHandler, tokenIssuer)
+	api := httpapi.NewAPI(httpapi.NewAPIParams{
+		Auth:         authHandler,
+		Prescription: rxHandler,
+		Logger:       logger,
+		TokenIssuer:  tokenIssuer,
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", healthHandler)

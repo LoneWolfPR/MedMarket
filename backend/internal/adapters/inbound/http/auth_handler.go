@@ -16,8 +16,6 @@ type AuthHandler struct {
 	svc    inbound.UserService
 }
 
-var _ openapi.StrictServerInterface = (*AuthHandler)(nil)
-
 // NewAuthHandlerParams is the object holding needed params
 type NewAuthHandlerParams struct {
 	Logger *slog.Logger
@@ -121,8 +119,6 @@ func (h *AuthHandler) GetProfile(
 
 func unauthorizedResponse() openapi.GetProfileResponseObject {
 	return openapi.GetProfile401JSONResponse{
-		UnauthorizedJSONResponse: openapi.UnauthorizedJSONResponse{
-			Message: msgUnauthorized,
-		},
+		UnauthorizedJSONResponse: unauthorizedBody(),
 	}
 }

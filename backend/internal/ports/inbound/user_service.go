@@ -19,7 +19,6 @@ import (
 //nolint:revive // sentinel errors are self-documenting
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrValidation         = errors.New("validation failed")
 	ErrEmailTaken         = errors.New("email already in use")
 )
 

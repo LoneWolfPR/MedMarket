@@ -4,6 +4,7 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http/openapi"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/inbound"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ptr"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -11,6 +12,7 @@ import (
 
 const (
 	msgInternalServerError = "internal server error"
+	msgUnauthorized        = "Unauthorized"
 )
 
 // toUserResponse maps a domain user onto the OpenAPI UserResponse DTO, applying
@@ -64,4 +66,14 @@ func MapToOAPIAddress(addr shared.Address) *openapi.Address {
 		oapiAddr.Street2 = ptr.To(addr.Street2)
 	}
 	return oapiAddr
+}
+
+func unauthorizedBody() openapi.UnauthorizedJSONResponse {
+	return openapi.UnauthorizedJSONResponse{Message: msgUnauthorized}
+}
+
+func validationBadRequestBody() openapi.BadRequestJSONResponse {
+	return openapi.BadRequestJSONResponse{
+		Message: inbound.ErrValidation.Error(),
+	}
 }

@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	msgUnauthorized  = "Unauthorized"
 	headerNameAuth   = "Authorization"
 	authHeaderScheme = "Bearer"
 )

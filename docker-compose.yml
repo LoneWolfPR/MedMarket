@@ -36,6 +36,11 @@ services:
       # MinIO (S3-compatible) — in-container endpoint is the service name on the
       # API port 9000; console (9001) is host-inspection only.
       - MINIO_ENDPOINT=minio:9000
+      # Host-reachable S3-API host (Traefik-routed) used ONLY to sign presigned
+      # URLs so the browser can resolve them; the backend still Puts via
+      # MINIO_ENDPOINT over the compose network.
+      - MINIO_PUBLIC_ENDPOINT=s3.localhost
+      - MINIO_REGION=us-east-1
       - MINIO_ACCESS_KEY=medmarket
       - MINIO_SECRET_KEY=medmarket-dev-secret
       - MINIO_BUCKET=prescriptions
@@ -152,9 +157,18 @@ services:
       - minio-data:/data
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.minio.rule=Host(`minio.localhost`)"
-      - "traefik.http.routers.minio.entrypoints=web"
-      - "traefik.http.services.minio.loadbalancer.server.port=9001"
+      # Console UI (9001) at http://minio.localhost — host inspection only.
+      - "traefik.http.routers.minio-console.rule=Host(`minio.localhost`)"
+      - "traefik.http.routers.minio-console.entrypoints=web"
+      - "traefik.http.routers.minio-console.service=minio-console"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+      # S3 API (9000) at http://s3.localhost — a host-reachable path to the S3
+      # API so presigned URLs (signed against this host) resolve from the
+      # browser. Two services on one container ⇒ each router names its service.
+      - "traefik.http.routers.minio-s3.rule=Host(`s3.localhost`)"
+      - "traefik.http.routers.minio-s3.entrypoints=web"
+      - "traefik.http.routers.minio-s3.service=minio-s3"
+      - "traefik.http.services.minio-s3.loadbalancer.server.port=9000"
     networks:
       - medmarket
 
