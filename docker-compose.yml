@@ -21,6 +21,8 @@ services:
   backend:
     build:
       context: ./backend
+      args:
+        CMD: server
     environment:
       - PORT=8080
       # In-container DB host is the compose service name on 5432 — NOT host 5433.
@@ -68,6 +70,30 @@ services:
         condition: service_completed_successfully
       mailpit:
         condition: service_started
+    networks:
+      - medmarket
+
+  # Temporal worker — a second binary from the same backend image (CMD=worker).
+  # Polls Temporal for price-search workflow/activity tasks; reaches Postgres, the
+  # mock pharmacies, and Temporal over the network. No inbound ports of its own.
+  worker:
+    build:
+      context: ./backend
+      args:
+        CMD: worker
+    environment:
+      # In-container DB host is the compose service name on 5432 — NOT host 5433.
+      - DATABASE_URL=postgres://medmarket:medmarket@postgres:5432/medmarket?sslmode=disable
+      - PHARMACY_A_BASE_URL=http://mock-pharmacy-a:8080
+      - PHARMACY_A_SECRET=pharmacy-a-dev-key
+      - PHARMACY_B_BASE_URL=http://mock-pharmacy-b:8080
+      - PHARMACY_B_SECRET=pharmacy-b-dev-token
+      - TEMPORAL_HOSTPORT=temporal:7233
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
     networks:
       - medmarket
 
@@ -222,9 +248,79 @@ services:
     networks:
       - medmarket
 
+  # --- Temporal ---------------------------------------------------------------
+  # Durable workflow engine. Runs as its own cluster (temporal) backed by a
+  # dedicated Postgres (temporal-db) — Temporal must NOT share the app database.
+  # The worker (backend/cmd/worker, Day 5) and the API connect to temporal:7233
+  # over the network; 7233 is also published so the host `temporal` CLI can reach it.
+
+  # Temporal's own Postgres, separate from the app's `postgres`. The auto-setup
+  # image creates the `temporal` and `temporal_visibility` databases inside it on
+  # first boot, so no POSTGRES_DB is set here.
+  temporal-db:
+    image: postgres:17
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=temporal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    volumes:
+      - temporal-db-data:/var/lib/postgresql/data
+    networks:
+      - medmarket
+
+  # Temporal server (auto-setup image): runs schema setup and creates the default
+  # namespace on first boot, then starts the server. DB=postgres12 is the driver
+  # name (compatible with Postgres 17); POSTGRES_SEEDS is the temporal-db host.
+  temporal:
+    image: temporalio/auto-setup:1.29.7
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-db
+    ports:
+      - "7233:7233" # gRPC frontend — host access for the `temporal` CLI/tooling
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    depends_on:
+      temporal-db:
+        condition: service_healthy
+    networks:
+      - medmarket
+
+  # Temporal Web UI, routed through Traefik at http://temporal.localhost (a Host
+  # rule like the other dashboards — avoids the SPA base-path config the plan's
+  # /temporal/ subpath would need, and never collides with the backend's /api).
+  temporal-ui:
+    image: temporalio/ui:2.52.1
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://temporal.localhost
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.temporal-ui.rule=Host(`temporal.localhost`)"
+      - "traefik.http.routers.temporal-ui.entrypoints=web"
+      - "traefik.http.services.temporal-ui.loadbalancer.server.port=8080"
+    depends_on:
+      temporal:
+        condition: service_healthy
+    networks:
+      - medmarket
+
 volumes:
   postgres-data:
   minio-data:
+  temporal-db-data:
 
 networks:
   medmarket:

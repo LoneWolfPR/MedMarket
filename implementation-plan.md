@@ -365,16 +365,16 @@ All inter-service communication happens over a shared Docker network. Backend re
 
 1. Design the order placement saga with explicit compensation:
    - Step 1: Validate and reserve the order (create Order record with `pending` status)
-   - Step 2: Process payment (mock — just validate a fake payment token and mark as charged)
+   - Step 2: Authorize payment via **Stripe test mode** — create + confirm a manual-capture PaymentIntent (places a hold; no funds captured yet). Real Stripe API, test keys, no real money moves. See "Payments" note below.
    - Step 3: Place order with the selected pharmacy API
    - Step 4: Register webhook with the shipping service
-   - Step 5: Update order status to `confirmed`, send confirmation email
-   - Compensation: if step 3 fails → refund payment (mock), update order to `failed`. If step 4 fails → cancel pharmacy order, refund payment, update order to `failed`
+   - Step 5: **Capture** the Stripe PaymentIntent (settle the authorized hold), update order status to `confirmed`, send confirmation email
+   - Compensation: if step 3 or 4 fails → **cancel the PaymentIntent** (void the authorization — cheaper/cleaner than a refund since nothing was captured), update order to `failed`. If a failure occurs *after* capture, fall back to a Stripe **Refund**.
 2. Implement each step as a Temporal activity
 3. Implement the saga workflow with compensation logic
 4. Define the `order` domain (Order entity, `OrderStatus` enum, OrderItem — **deferred from Day 2**), then add order-related Ent schemas and Atlas migration (Order, OrderItem with relations to User, Prescription, selected pharmacy)
 5. Build the API endpoints:
-   - `POST /api/orders` — accepts prescription ID, selected pharmacy quote, payment token; starts the order workflow
+   - `POST /api/orders` — accepts prescription ID, selected pharmacy quote, and a Stripe PaymentMethod id (test-mode, e.g. `pm_card_visa`); starts the order workflow
    - `GET /api/orders` — list user's orders
    - `GET /api/orders/:id` — order detail with current status
 6. Implement the shipping webhook receiver on the backend:
@@ -391,7 +391,9 @@ All inter-service communication happens over a shared Docker network. Backend re
 - Temporal signals — external events (like webhook callbacks) that influence a running workflow
 - Idempotency — your activities should be safe to retry (Temporal may replay them)
 
-**Checkpoint:** Full order flow works. Force a failure at step 3, verify the payment gets refunded and order marked failed. Check Mailpit for confirmation and status emails.
+**Payments (design decision, 2026-07-14):** Use **Stripe test mode** (real Stripe API, `sk_test_…` keys) instead of a pure mock — test transactions are free, unlimited, and move no real money; a free Stripe account with no business activation is enough. Modeled hexagonally: a `PaymentGateway` outbound port (`Authorize`/`Capture`/`Cancel`/`Refund`) with a `stripe` adapter, structurally identical to `PharmacyClient` — the domain never imports Stripe. `STRIPE_SECRET_KEY` injected as a per-adapter env var at the composition root (same pattern as pharmacy secrets → GKE Secret later). **All Stripe calls happen inside Temporal activities, never the workflow** (side effects + nondeterminism), and **every activity passes a Stripe idempotency key** — Temporal retries activities, so the key is what prevents a retry from double-charging (the Temporal-retry ↔ Stripe-idempotency pairing is a deliberate learning target). Auth-then-capture (manual-capture PaymentIntent) is chosen over charge-then-refund so saga compensation is a cheap authorization *void*, not a settled-money reversal.
+
+**Checkpoint:** Full order flow works. Force a failure at step 3, verify the Stripe authorization gets voided (check the Stripe test dashboard) and order marked failed. Check Mailpit for confirmation and status emails.
 
 ---
 
@@ -697,7 +699,7 @@ These are all valuable in production systems but would bloat a two-week learning
 - **Secrets management (HashiCorp Vault, GCP Secret Manager):** The right way to handle secrets in Kubernetes. Using Kubernetes Secrets directly is the pragmatic choice here.
 - **Database connection pooling (PgBouncer):** Important at scale, irrelevant with your traffic level.
 - **CDN/static asset optimization:** Your frontend is tiny. Not worth the complexity.
-- **Real payment processing:** The mock payment is sufficient to exercise the saga pattern, which is the real learning goal.
+- **Live payment processing (real money):** Out of scope, but payments are **not** mocked — Day 6 uses **Stripe test mode** (real API, test keys, no real funds) so the saga exercises a genuine external payment gateway. See the Day 6 Payments note.
 - **Horizontal pod autoscaling:** Your 2-node cluster doesn't have the headroom to demonstrate this meaningfully.
 
 Each of these would be a strong follow-up project once this foundation is solid.

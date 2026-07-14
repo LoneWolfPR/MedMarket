@@ -57,6 +57,7 @@ MedMarket lets a user:
 | Reverse proxy         | Traefik                                                           |
 | Object storage (local)| MinIO (S3-compatible)                                             |
 | Email (local)         | Mailpit (SMTP capture)                                            |
+| Payments              | [Stripe](https://stripe.com) (test mode — no real transactions)   |
 | Local orchestration   | Docker Compose                                                    |
 | Deployment            | Google Kubernetes Engine (GKE), Terraform                        |
 | Tooling               | [go-task](https://taskfile.dev) (task runner), golangci-lint      |

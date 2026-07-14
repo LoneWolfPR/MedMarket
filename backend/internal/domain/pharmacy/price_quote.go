@@ -47,3 +47,18 @@ func NewPriceQuote(p NewPriceQuoteParams) (PriceQuote, error) {
 		pharmacyItemID: trimmedItemID,
 	}, nil
 }
+
+// Price is a getter
+func (q *PriceQuote) Price() shared.Money {
+	return q.price
+}
+
+// PharmacyID is a getter
+func (q *PriceQuote) PharmacyID() uuid.UUID {
+	return q.pharmacyID
+}
+
+// PharmacyItemID is a getter
+func (q *PriceQuote) PharmacyItemID() string {
+	return q.pharmacyItemID
+}
