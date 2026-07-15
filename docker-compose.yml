@@ -52,6 +52,9 @@ services:
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
       - SMTP_FROM=no-reply@medmarket.local
+      # The API starts price-search workflows (the worker executes them), so it
+      # dials Temporal too.
+      - TEMPORAL_HOSTPORT=temporal:7233
     labels:
       - "traefik.enable=true"
       # PathPrefix(/api) is longer than the frontend's PathPrefix(/), so Traefik
@@ -70,6 +73,9 @@ services:
         condition: service_completed_successfully
       mailpit:
         condition: service_started
+      # Dial happens at startup, so wait for the cluster to be serving.
+      temporal:
+        condition: service_healthy
     networks:
       - medmarket
 

@@ -24,6 +24,7 @@ type config struct {
 	MinioSecretKey      string
 	MinioBucket         string
 	MinioUseSSL         bool
+	TemporalHostPort    string
 }
 
 func loadConfig() (config, error) {
@@ -44,6 +45,7 @@ func loadConfig() (config, error) {
 		MinioSecretKey:      r.Require(envkeys.MinioSecretKey),
 		MinioBucket:         r.Require(envkeys.MinioBucket),
 		MinioUseSSL:         r.RequireBool(envkeys.MinioUseSSL),
+		TemporalHostPort:    r.Require(envkeys.TemporalHostPort),
 	}
 	if err := r.Err(); err != nil {
 		return config{}, err

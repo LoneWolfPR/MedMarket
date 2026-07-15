@@ -11,6 +11,7 @@ import (
 type server struct {
 	*AuthHandler
 	*PrescriptionHandler
+	*PriceSearchHandler
 }
 
 var _ openapi.StrictServerInterface = (*server)(nil)
@@ -19,26 +20,34 @@ var _ openapi.StrictServerInterface = (*server)(nil)
 type NewAPIParams struct {
 	Auth         *AuthHandler
 	Prescription *PrescriptionHandler
+	Search       *PriceSearchHandler
 	Logger       *slog.Logger
 	TokenIssuer  outbound.TokenIssuer
 }
 
-// NewAPI assembles the auth handler, JWT middleware, and error-rendering policy
-// into a routable ServerInterface. It is the http package's single exported seam:
-// the middleware, context key, and error helpers stay unexported here.
-func NewAPI(p NewAPIParams) openapi.ServerInterface {
+// NewAPI assembles the handlers, JWT middleware, and error-rendering policy, then
+// mounts every route from the spec onto mux and returns it. It is the http
+// package's single exported seam: the middleware, context key, and error helpers
+// stay unexported here.
+//
+// Mounting happens here rather than in main because the two error hooks below
+// render through writeJSONError, which is unexported by design.
+func NewAPI(p NewAPIParams, mux openapi.ServeMux) http.Handler {
 	s := &server{
 		AuthHandler:         p.Auth,
 		PrescriptionHandler: p.Prescription,
+		PriceSearchHandler:  p.Search,
 	}
 	protected := map[string]struct{}{
-		"GetProfile":         {},
-		"UploadPrescription": {},
-		"ListPrescriptions":  {},
+		"GetProfile":               {},
+		"UploadPrescription":       {},
+		"ListPrescriptions":        {},
+		"SearchPrescriptionPrices": {},
 	}
 	authMW := newAuthMiddleware(p.TokenIssuer, protected)
 
-	opts := openapi.StrictHTTPServerOptions{
+	// Body-binding and handler errors, raised inside the strict handler.
+	strictOpts := openapi.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(
 			w http.ResponseWriter,
 			_ *http.Request,
@@ -55,7 +64,19 @@ func NewAPI(p NewAPIParams) openapi.ServerInterface {
 			writeJSONError(w, http.StatusInternalServerError, msgInternalServerError)
 		},
 	}
+	api := openapi.NewStrictHandlerWithOptions(s, []openapi.StrictMiddlewareFunc{authMW}, strictOpts)
 
-	return openapi.NewStrictHandlerWithOptions(s, []openapi.StrictMiddlewareFunc{authMW}, opts)
-
+	// Path- and query-parameter binding runs before the strict handler is reached,
+	// so its failures surface on this separate hook. Without it the generated
+	// default renders text/plain, breaking the spec's Error schema contract.
+	return openapi.HandlerWithOptions(api, openapi.StdHTTPServerOptions{
+		BaseRouter: mux,
+		ErrorHandlerFunc: func(
+			w http.ResponseWriter,
+			_ *http.Request,
+			err error,
+		) {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+		},
+	})
 }

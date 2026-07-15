@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -60,6 +61,21 @@ type PrescriptionResponse struct {
 	StrengthValue string             `json:"strengthValue"`
 }
 
+// QuoteResponse defines model for QuoteResponse.
+type QuoteResponse struct {
+	PharmacyId openapi_types.UUID `json:"pharmacyId"`
+
+	// PharmacyItemId The pharmacy's own identifier for the item (SKU, code, ...)
+	PharmacyItemId string `json:"pharmacyItemId"`
+	PharmacyName   string `json:"pharmacyName"`
+
+	// TotalCents Unit price multiplied by the prescription quantity, in cents
+	TotalCents int64 `json:"totalCents"`
+
+	// UnitPriceCents Price per unit, in cents
+	UnitPriceCents int64 `json:"unitPriceCents"`
+}
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	Address   *Address            `json:"address,omitempty"`
@@ -87,6 +103,9 @@ type UserResponse struct {
 
 // BadRequest defines model for BadRequest.
 type BadRequest = Error
+
+// NotFound defines model for NotFound.
+type NotFound = Error
 
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error
@@ -131,6 +150,9 @@ type ServerInterface interface {
 	// Upload a prescription document and its metadata
 	// (POST /api/prescriptions/upload)
 	UploadPrescription(w http.ResponseWriter, r *http.Request)
+	// Search pharmacies for prices on a prescription's medication
+	// (POST /api/prescriptions/{id}/search)
+	SearchPrescriptionPrices(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -221,6 +243,38 @@ func (siw *ServerInterfaceWrapper) UploadPrescription(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UploadPrescription(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SearchPrescriptionPrices operation middleware
+func (siw *ServerInterfaceWrapper) SearchPrescriptionPrices(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchPrescriptionPrices(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -355,11 +409,14 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/auth/register", wrapper.RegisterUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/prescriptions", wrapper.ListPrescriptions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prescriptions/upload", wrapper.UploadPrescription)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prescriptions/{id}/search", wrapper.SearchPrescriptionPrices)
 
 	return m
 }
 
 type BadRequestJSONResponse Error
+
+type NotFoundJSONResponse Error
 
 type UnauthorizedJSONResponse Error
 
@@ -569,6 +626,56 @@ func (response UploadPrescription401JSONResponse) VisitUploadPrescriptionRespons
 	return err
 }
 
+type SearchPrescriptionPricesRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type SearchPrescriptionPricesResponseObject interface {
+	VisitSearchPrescriptionPricesResponse(w http.ResponseWriter) error
+}
+
+type SearchPrescriptionPrices200JSONResponse []QuoteResponse
+
+func (response SearchPrescriptionPrices200JSONResponse) VisitSearchPrescriptionPricesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchPrescriptionPrices401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response SearchPrescriptionPrices401JSONResponse) VisitSearchPrescriptionPricesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchPrescriptionPrices404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response SearchPrescriptionPrices404JSONResponse) VisitSearchPrescriptionPricesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Exchange credentials for a bearer token
@@ -586,6 +693,9 @@ type StrictServerInterface interface {
 	// Upload a prescription document and its metadata
 	// (POST /api/prescriptions/upload)
 	UploadPrescription(ctx context.Context, request UploadPrescriptionRequestObject) (UploadPrescriptionResponseObject, error)
+	// Search pharmacies for prices on a prescription's medication
+	// (POST /api/prescriptions/{id}/search)
+	SearchPrescriptionPrices(ctx context.Context, request SearchPrescriptionPricesRequestObject) (SearchPrescriptionPricesResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -758,30 +868,61 @@ func (sh *strictHandler) UploadPrescription(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// SearchPrescriptionPrices operation middleware
+func (sh *strictHandler) SearchPrescriptionPrices(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request SearchPrescriptionPricesRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SearchPrescriptionPrices(ctx, request.(SearchPrescriptionPricesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SearchPrescriptionPrices")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SearchPrescriptionPricesResponseObject); ok {
+		if err := validResponse.VisitSearchPrescriptionPricesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"1FdRb9s2EP4rBDdgG6DGTruX+S3F0iJDMgRpvD0EebiIZ5mtRKrHU1K38H8fjrJsKZYcd6k77EkSSR3v",
-	"vvs+3vGLTn1ReoeOg5580YSh9C5g/HgN5go/VhhYvlLvGF18hbLMbQpsvRu9D97JWEjnWIC8/Ug40xP9",
-	"w2hjelTPhtEpkSe9XC4TbTCkZEsxoif6zN1Dbo2i1YbLRE8dVDz3ZD+jObwDFzYE6zLlSdmVLymhQccW",
-	"8qDlh5UN2eLEGMIQX0vyJRLbGrPU8kKevChRT3Rgsi6TaAIDo8x0t71+8C9yZEZScYWCuzvCextj04ku",
-	"4NM5uoznevIy0YV1ra+ePQiRjwf2l7mXvXOfbdkzvky0ZMOSwH+zNp7UMTYR1X/frr3xd+8xjfmrod5C",
-	"qMAQIMOnN2wW9tk+95l1LXJ2t8ACbC4vM08FsJ6sRnogKyGEB0+ms3o9mDzhYmN2/UOfr5e0yfjVSl/b",
-	"PhufVgU6nlK+zZJ3c0/8Irf3aFRJGGzm0Kjp1blir3iOqipzDwaNasz0xWq7UVaVNX3LCjR/QoG9TCnn",
-	"i2BTC25wxccKHHdFYB1jhtSwUPg7dZYHaSoL/oK82oMjMYKuU5sAHlt7tH3L16QDf18SrzCzgZEGOQeb",
-	"E2HX+dMcHMvka1g6sxR4EPIcdkx+JcEFTe/2QH7jUsuBZD9FXPsPuEMKLNNPe1Av67M/DZKoIfP/Yab2",
-	"VODuhO6Xn2i5cbM3WdvIif4wrcjy4p2gUON1h0BIJ5VUnebrTRPCH39f61VlFEv17CamOXNZV1vrZn77",
-	"YGufjaokm6KSVADZIAM5sIClTi7PjsSo5VysXqC5APqALBM60fdIobY3Pjo+GgtKvkQHpdUT/epofPQq",
-	"MpLnMZ4RlHYkrcUolyoSCeJrSQtNYuU9M3pSFxnhkq6hxcCvvVl8s16kU8SW3QQyVRgHWv3Yy/H4m+3d",
-	"lWBPPyT5luYnBUYjiP46Ph4yuvZy1OnZIp+qogBa6Ik+/ZTOwWXYbqvUzJMCVbNG1YJONEMWhMJiSt+K",
-	"lU3KSvIzm0f+Z9iTs7fIl6slB0Svc8D0gHctJTkgqcbdf4/fSo96ctNV4s3t8rYN71vk2AlAO2/RiZ/C",
-	"2o3d2NKqxg0roqmCBxTF40K7ly6Ov1tmZV4YvFHF+Omsti5S8ZffDn+dOZWTX0FOCGahmsxuibJBW4Fy",
-	"+FBzFtLUV3UH2U+WsnVoh0ElntvAl52VzxSkZSyerNq9zfZyXY+ACBa7FBvF0nb68MoVoHZJtwthk5Pu",
-	"+EByRvW9YFjQ0zjfBm2nrIsqZ1sC8UjK8gsDDN0c9d9peq69c+xEtr63qJ9tARnKNfzy9ze/SO/StBp3",
-	"1glg//MbS+uC9vx7S08L911Py361baur0+Y99/Q8qBhrQSgYYCc4oywHVSBDZP8OQcZtSXrTuGslF3s9",
-	"0svb5T8BAAD//w==",
+	"1FhRk9M2EP4rGrUzwIxJ7oDpTPMGLTC0B3O949oH5h727E0ssCWzWt8RmPz3zkpxYl/sJAeETp9iW9Jq",
+	"9e33rXbzRaeurJxFy15PvmhCXznrMbw8g+wMP9boWd5SZxlteISqKkwKbJwdv/fOyjef5liCPP1MONUT",
+	"/dN4bXocR/34OZEjvVgsEp2hT8lUYkRP9Ct7DYXJFC03XCT6jeMXrrbZ4Td/m2OzMYoL3tWUosocemUd",
+	"K/xkoksXFmrOHZnP+APcem28N3amHCmzhCclzNCygcJrWbC0IVs8zTJCHx4rchUSmxjG1PBcfnleoZ5o",
+	"z2TsTE7jGRhl5BYaN+5hgcxIKsxQcHVFeG3C2XSiS/h0gnbGuZ48SnRpbOutZw9C5OOB/WXsUe/YZ1P1",
+	"fF8kWuJkSOB/tzKexDM2J4qrL1feuKv3mIb4Rag3ECrRe5jh7g2biX22T9zM2JZeultgCaaQh6mjElhP",
+	"ll96IKvA+xtHWWf26mOyw8XG7GpBn6+ntI742VLymz5nLq1LtHxBxSZLznNH/LAw15ipitCbmcVMXZyd",
+	"KHaKc1R1VTjIMFONmb6zmu4p69pkfdNKzN5Aib1MqfK5N6kBOzjjYw2WuyIwlnGG1LBQ+HthDQ/SVCb8",
+	"DUW9B0fCCbpOrQ9w29qt7Vu+Jh34+4L4V+0Yh6NX5UAlpPNX+0G8ms5YxiWbObKZc88rd2OVCaloapDU",
+	"1FEIumEs1f3zPy8SlboMEzUajR5s224waOwYit+ae6nri2ClKjIpqrIu2FSFwUxdzYMLVYvbqoEzUcaq",
+	"NFhL1lgYy788WXvXIkVtDZ/KBgMehDFVISmZeTfrt/jSitMtWDaCsuFXB6Y+jpzhzHhGGsxLsL41tt1R",
+	"zeWySO6SyaaGPA9GuIAtg3dMggKVs3uoc+1Sy4Fkv6z51n3ALemSZXi3B3Fan/0LL4EaMv8fRmrPLL09",
+	"oPvFJ1hu3OwN1iZykqMxrcnw/FxQiHhdIRDS01oqk+btRXOEP/55q5fVk1iKo+sz5cxVrMiMnbo++bdy",
+	"TExEEgog4+VDASxgqaenr0Zi1HAhVl9j9hroA7IM6ERfI/lo72h0PDoSlFyFFiqjJ/rx6Gj0ODCS83Ce",
+	"MVRmLOXnuJBKIxDERUkLTUJ1Jok7FiLCJR2hRc/PXDb/bvVqp9BZdAPIVGP40GojHh0dfbe9uxLsqZkl",
+	"3nIrpcCYCaJPjo6HjK68HHfq+sCnuiyB5nqin39Kc7AzbJfe4boDFVmjoqATzTDzQmExpS/FyjpkFbmp",
+	"KQL/Z9gTs5fIp8spB0Svk2AG+qDaI6nG3a/Hb6lHPXnXVeK7y8VlG96XyOHWhnbcghP3/MqN7djS8o4b",
+	"VkRzCx5QFLcv2r10cfzDIivjwuC1Ko52R7XV/4clvx6+5X0umV9BQQjZXDWR3RBlg7YCZfEmchbS1NWx",
+	"y+gnS7sw9INKPDGeTzszv1GQUhLvvLV7G7LF6j4CIphvU2wQS9vpwytXgNom3S6ETUy63weCM46947Cg",
+	"L8J4G7Stso5NAhCP5Vp+mAFDN0b9fe9AE9S++5up6r4pYYbKkTr9/cWDdhtwZawA9j/valtN/Lf3tj0l",
+	"3A/Nlv1q21RXp8z71ux5UDFGQSgYYCfYTBn2qkSGwP67CvKLyRZjj0BpPqzK8zDeBi20qj5UsQQlMpIP",
+	"R9mhKnaxqNZSf4e+j3OdaBukEFuELlmSVuB3tCmC2+Hzefe/mT0SeVjg1ZRcGf/FiJ2/Qa84B1aeXfoh",
+	"jJSYLZ1LVJojVOhZhU7pK3kmi57sXrT6O/5OxIycaB9HaucQXa+cvcXYe751vG0kDS7QdcOnmgo90WO9",
+	"uFz8GwAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

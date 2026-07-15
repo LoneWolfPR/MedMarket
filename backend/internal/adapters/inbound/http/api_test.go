@@ -88,14 +88,12 @@ func newStack(t *testing.T, svc inbound.UserService, ti outbound.TokenIssuer) ht
 	})
 	require.NoError(t, err)
 
-	mux := http.NewServeMux()
-	openapi.HandlerFromMux(httpapi.NewAPI(httpapi.NewAPIParams{
+	return httpapi.NewAPI(httpapi.NewAPIParams{
 		Auth:         h,
 		Prescription: ph,
 		Logger:       logger,
 		TokenIssuer:  ti,
-	}), mux)
-	return mux
+	}, http.NewServeMux())
 }
 
 func buildUser(t *testing.T) *user.User {

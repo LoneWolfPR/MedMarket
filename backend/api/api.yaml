@@ -133,6 +133,35 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /api/prescriptions/{id}/search:
+    post:
+      operationId: searchPrescriptionPrices
+      summary: Search pharmacies for prices on a prescription's medication
+      tags: [prescriptions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The prescription to price
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Quotes from the pharmacies that stock the medication, cheapest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QuoteResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -149,6 +178,12 @@ components:
             $ref: '#/components/schemas/Error'
     Unauthorized:
       description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The requested resource does not exist
       content:
         application/json:
           schema:
@@ -249,6 +284,27 @@ components:
         documentUrl:
           type: string
           description: Short-lived presigned URL to the uploaded document
+
+    QuoteResponse:
+      type: object
+      required: [pharmacyId, pharmacyName, pharmacyItemId, unitPriceCents, totalCents]
+      properties:
+        pharmacyId:
+          type: string
+          format: uuid
+        pharmacyName:
+          type: string
+        pharmacyItemId:
+          type: string
+          description: The pharmacy's own identifier for the item (SKU, code, ...)
+        unitPriceCents:
+          type: integer
+          format: int64
+          description: Price per unit, in cents
+        totalCents:
+          type: integer
+          format: int64
+          description: Unit price multiplied by the prescription quantity, in cents
 
     Error:
       type: object

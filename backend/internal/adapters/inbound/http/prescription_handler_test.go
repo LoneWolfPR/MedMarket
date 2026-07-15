@@ -61,14 +61,12 @@ func newRxStack(t *testing.T, rxSvc inbound.PrescriptionService, ti outbound.Tok
 	ph, err := httpapi.NewPrescriptionHandler(httpapi.NewPrescriptionHandlerParams{Logger: logger, Svc: rxSvc})
 	require.NoError(t, err)
 
-	mux := http.NewServeMux()
-	openapi.HandlerFromMux(httpapi.NewAPI(httpapi.NewAPIParams{
+	return httpapi.NewAPI(httpapi.NewAPIParams{
 		Auth:         h,
 		Prescription: ph,
 		Logger:       logger,
 		TokenIssuer:  ti,
-	}), mux)
-	return mux
+	}, http.NewServeMux())
 }
 
 // validRxFields returns the non-file form fields for a valid upload.

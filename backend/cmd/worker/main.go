@@ -20,6 +20,7 @@ import (
 
 	temporalclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 )
 
 func main() {
@@ -118,7 +119,9 @@ func run() error {
 	defer c.Close()
 
 	w := worker.New(c, pricesearch.TaskQueue, worker.Options{})
-	w.RegisterWorkflow(pricesearch.PriceSearchWorkflow)
+	w.RegisterWorkflowWithOptions(pricesearch.PriceSearchWorkflow, workflow.RegisterOptions{
+		Name: pricesearch.WorkflowName,
+	})
 	w.RegisterActivity(activities)
 	return w.Run(worker.InterruptCh())
 }

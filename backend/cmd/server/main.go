@@ -11,16 +11,17 @@ import (
 	"time"
 
 	httpapi "github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http"
-	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http/openapi"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/bcrypt"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/jwt"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/postgres"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/s3"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/temporal"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/app"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/bootstrap"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	temporalclient "go.temporal.io/sdk/client"
 )
 
 const presignTTL = 15 * time.Minute
@@ -77,6 +78,25 @@ func run() error {
 		return fmt.Errorf("error seeding pharmacy data: %w", err)
 	}
 
+	// Setup Temporal. The API only starts price-search workflows; the worker
+	// executes them, so no worker/activity registration happens here.
+	temporalClient, err := temporalclient.Dial(temporalclient.Options{
+		HostPort:  cfg.TemporalHostPort,
+		Namespace: "default",
+	})
+	if err != nil {
+		return fmt.Errorf("error setting up temporal client: %w", err)
+	}
+	defer temporalClient.Close()
+
+	priceSearcher, err := temporal.NewPriceSearcher(temporal.NewPriceSearcherParams{
+		Client: temporalClient,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set up price searcher: %w", err)
+	}
+
 	// Outbound adapters
 	repo, err := postgres.NewUserRepository(postgres.NewUserRepositoryParams{
 		Client: client,
@@ -120,6 +140,15 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to set up prescription service: %w", err)
 	}
+	priceSearchService, err := app.NewPriceSearchService(app.NewPriceSearchServiceParams{
+		Logger:    logger,
+		RxRepo:    rxRepo,
+		PharmRepo: pharmacyRepo,
+		Searcher:  priceSearcher,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set up price search service: %w", err)
+	}
 
 	// Inbound Adapters
 	authHandler, err := httpapi.NewAuthHandler(httpapi.NewAuthHandlerParams{
@@ -136,24 +165,30 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to setup prescription handler: %w", err)
 	}
-
-	api := httpapi.NewAPI(httpapi.NewAPIParams{
-		Auth:         authHandler,
-		Prescription: rxHandler,
-		Logger:       logger,
-		TokenIssuer:  tokenIssuer,
+	priceSearchHandler, err := httpapi.NewPriceSearchHandler(httpapi.NewPriceSearchHandlerParams{
+		Logger: logger,
+		Svc:    priceSearchService,
 	})
+	if err != nil {
+		return fmt.Errorf("failed to setup price search handler: %w", err)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", healthHandler)
-	openapi.HandlerFromMux(api, mux)
+	handler := httpapi.NewAPI(httpapi.NewAPIParams{
+		Auth:         authHandler,
+		Prescription: rxHandler,
+		Search:       priceSearchHandler,
+		Logger:       logger,
+		TokenIssuer:  tokenIssuer,
+	}, mux)
 
 	// Explicit timeouts guard against slow-client attacks (e.g. Slowloris);
 	// the bare http.ListenAndServe uses a zero-value server with none, which
 	// is what gosec flags (G114).
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/prescription"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
@@ -86,4 +87,39 @@ func (f fakeFileStorage) Put(ctx context.Context, key, contentType string, reade
 
 func (f fakeFileStorage) GetPresignedURL(ctx context.Context, key string) (string, error) {
 	return f.presignFn(ctx, key)
+}
+
+type fakePharmacyRepo struct {
+	createFn    func(ctx context.Context, p *pharmacy.Pharmacy) (*pharmacy.Pharmacy, error)
+	getByIDFn   func(ctx context.Context, id uuid.UUID) (*pharmacy.Pharmacy, error)
+	getByCodeFn func(ctx context.Context, code string) (*pharmacy.Pharmacy, error)
+	listFn      func(ctx context.Context) ([]pharmacy.Pharmacy, error)
+}
+
+func (f fakePharmacyRepo) Create(
+	ctx context.Context, p *pharmacy.Pharmacy,
+) (*pharmacy.Pharmacy, error) {
+	return f.createFn(ctx, p)
+}
+
+func (f fakePharmacyRepo) GetByID(ctx context.Context, id uuid.UUID) (*pharmacy.Pharmacy, error) {
+	return f.getByIDFn(ctx, id)
+}
+
+func (f fakePharmacyRepo) GetByCode(ctx context.Context, code string) (*pharmacy.Pharmacy, error) {
+	return f.getByCodeFn(ctx, code)
+}
+
+func (f fakePharmacyRepo) List(ctx context.Context) ([]pharmacy.Pharmacy, error) {
+	return f.listFn(ctx)
+}
+
+type fakePriceSearcher struct {
+	searchFn func(ctx context.Context, criteria pharmacy.SearchCriteria) ([]pharmacy.PriceQuote, error)
+}
+
+func (f fakePriceSearcher) Search(
+	ctx context.Context, criteria pharmacy.SearchCriteria,
+) ([]pharmacy.PriceQuote, error) {
+	return f.searchFn(ctx, criteria)
 }

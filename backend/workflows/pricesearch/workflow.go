@@ -16,6 +16,11 @@ import (
 // starter targets in StartWorkflowOptions. Both sides must use this exact value.
 const TaskQueue = "price-search"
 
+// WorkflowName is the registered type name of PriceSearchWorkflow, shared by the
+// worker's registration and the starter's ExecuteWorkflow. The Go function may be
+// renamed; this value may not — versioning means a new name alongside the old.
+const WorkflowName = "PriceSearchWorkflow"
+
 // SearchInput contains the values needed to search from quotes from pharmacies
 type SearchInput struct {
 	MedName          string
