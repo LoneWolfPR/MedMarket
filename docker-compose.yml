@@ -30,6 +30,9 @@ services:
       # Local-dev only. Real secrets come from the platform on GKE.
       - JWT_SECRET=local-dev-insecure-secret-change-me
       - JWT_TTL=24h
+      # How long a searched price is honored for. Set explicitly rather than left to
+      # the code's fallback: it is a business decision, not an implementation one.
+      - OFFER_TTL=15m
       # Mock PHarmacy service config variables
       - PHARMACY_A_BASE_URL=http://mock-pharmacy-a:8080
       - PHARMACY_A_SECRET=pharmacy-a-dev-key

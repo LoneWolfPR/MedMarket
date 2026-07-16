@@ -48,6 +48,17 @@ func (r *Reader) DurationOr(key string, fallback time.Duration) time.Duration {
 	return d
 }
 
+// PositiveDurationOr parses a duration and validates it is positive, falling back
+// to fallback when unset and recording an error when validation fails
+func (r *Reader) PositiveDurationOr(key string, fallback time.Duration) time.Duration {
+	d := r.DurationOr(key, fallback)
+	if d <= 0 {
+		r.errs = append(r.errs, fmt.Errorf("%s is not a positive duration: %s", key, d))
+		return fallback
+	}
+	return d
+}
+
 // RequireBool parses a mandatory boolean variable, recording an error when it
 // is unset or malformed.
 func (r *Reader) RequireBool(key string) bool {

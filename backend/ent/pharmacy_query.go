@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -11,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/offer"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/predicate"
 	"github.com/google/uuid"
@@ -23,6 +25,7 @@ type PharmacyQuery struct {
 	order      []pharmacy.OrderOption
 	inters     []Interceptor
 	predicates []predicate.Pharmacy
+	withOffers *OfferQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -57,6 +60,28 @@ func (_q *PharmacyQuery) Unique(unique bool) *PharmacyQuery {
 func (_q *PharmacyQuery) Order(o ...pharmacy.OrderOption) *PharmacyQuery {
 	_q.order = append(_q.order, o...)
 	return _q
+}
+
+// QueryOffers chains the current query on the "offers" edge.
+func (_q *PharmacyQuery) QueryOffers() *OfferQuery {
+	query := (&OfferClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(pharmacy.Table, pharmacy.FieldID, selector),
+			sqlgraph.To(offer.Table, offer.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, pharmacy.OffersTable, pharmacy.OffersColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // First returns the first Pharmacy entity from the query.
@@ -251,10 +276,22 @@ func (_q *PharmacyQuery) Clone() *PharmacyQuery {
 		order:      append([]pharmacy.OrderOption{}, _q.order...),
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Pharmacy{}, _q.predicates...),
+		withOffers: _q.withOffers.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
+}
+
+// WithOffers tells the query-builder to eager-load the nodes that are connected to
+// the "offers" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *PharmacyQuery) WithOffers(opts ...func(*OfferQuery)) *PharmacyQuery {
+	query := (&OfferClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withOffers = query
+	return _q
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -333,8 +370,11 @@ func (_q *PharmacyQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *PharmacyQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Pharmacy, error) {
 	var (
-		nodes = []*Pharmacy{}
-		_spec = _q.querySpec()
+		nodes       = []*Pharmacy{}
+		_spec       = _q.querySpec()
+		loadedTypes = [1]bool{
+			_q.withOffers != nil,
+		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*Pharmacy).scanValues(nil, columns)
@@ -342,6 +382,7 @@ func (_q *PharmacyQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Pha
 	_spec.Assign = func(columns []string, values []any) error {
 		node := &Pharmacy{config: _q.config}
 		nodes = append(nodes, node)
+		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	for i := range hooks {
@@ -353,7 +394,45 @@ func (_q *PharmacyQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Pha
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := _q.withOffers; query != nil {
+		if err := _q.loadOffers(ctx, query, nodes,
+			func(n *Pharmacy) { n.Edges.Offers = []*Offer{} },
+			func(n *Pharmacy, e *Offer) { n.Edges.Offers = append(n.Edges.Offers, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
+}
+
+func (_q *PharmacyQuery) loadOffers(ctx context.Context, query *OfferQuery, nodes []*Pharmacy, init func(*Pharmacy), assign func(*Pharmacy, *Offer)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*Pharmacy)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(offer.FieldPharmacyID)
+	}
+	query.Where(predicate.Offer(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(pharmacy.OffersColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.PharmacyID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "pharmacy_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
 }
 
 func (_q *PharmacyQuery) sqlCount(ctx context.Context) (int, error) {

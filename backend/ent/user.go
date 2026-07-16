@@ -41,8 +41,29 @@ type User struct {
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
-	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the UserQuery when eager-loading is set.
+	Edges        UserEdges `json:"edges"`
 	selectValues sql.SelectValues
+}
+
+// UserEdges holds the relations/edges for other nodes in the graph.
+type UserEdges struct {
+	// Prescriptions holds the value of the prescriptions edge.
+	Prescriptions []*Prescription `json:"prescriptions,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [1]bool
+}
+
+// PrescriptionsOrErr returns the Prescriptions value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) PrescriptionsOrErr() ([]*Prescription, error) {
+	if e.loadedTypes[0] {
+		return e.Prescriptions, nil
+	}
+	return nil, &NotLoadedError{edge: "prescriptions"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -160,6 +181,11 @@ func (_m *User) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *User) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
+}
+
+// QueryPrescriptions queries the "prescriptions" edge of the User entity.
+func (_m *User) QueryPrescriptions() *PrescriptionQuery {
+	return NewUserClient(_m.config).QueryPrescriptions(_m)
 }
 
 // Update returns a builder for updating this User.

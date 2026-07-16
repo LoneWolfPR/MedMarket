@@ -5,6 +5,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 )
@@ -75,5 +76,9 @@ func (Pharmacy) Fields() []ent.Field {
 
 // Edges of the Pharmacy.
 func (Pharmacy) Edges() []ent.Edge {
-	return nil
+	return []ent.Edge{
+		// Inverse side of Offer.pharmacy. Declared only so Ent emits the FK
+		// constraint on offers.pharmacy_id; nothing traverses it.
+		edge.To("offers", Offer.Type),
+	}
 }

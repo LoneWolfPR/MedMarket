@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/predicate"
 	"github.com/google/uuid"
 )
@@ -118,26 +119,6 @@ func UserIDIn(vs ...uuid.UUID) predicate.Prescription {
 // UserIDNotIn applies the NotIn predicate on the "user_id" field.
 func UserIDNotIn(vs ...uuid.UUID) predicate.Prescription {
 	return predicate.Prescription(sql.FieldNotIn(FieldUserID, vs...))
-}
-
-// UserIDGT applies the GT predicate on the "user_id" field.
-func UserIDGT(v uuid.UUID) predicate.Prescription {
-	return predicate.Prescription(sql.FieldGT(FieldUserID, v))
-}
-
-// UserIDGTE applies the GTE predicate on the "user_id" field.
-func UserIDGTE(v uuid.UUID) predicate.Prescription {
-	return predicate.Prescription(sql.FieldGTE(FieldUserID, v))
-}
-
-// UserIDLT applies the LT predicate on the "user_id" field.
-func UserIDLT(v uuid.UUID) predicate.Prescription {
-	return predicate.Prescription(sql.FieldLT(FieldUserID, v))
-}
-
-// UserIDLTE applies the LTE predicate on the "user_id" field.
-func UserIDLTE(v uuid.UUID) predicate.Prescription {
-	return predicate.Prescription(sql.FieldLTE(FieldUserID, v))
 }
 
 // DocumentKeyEQ applies the EQ predicate on the "document_key" field.
@@ -583,6 +564,52 @@ func UpdatedAtLT(v time.Time) predicate.Prescription {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.Prescription {
 	return predicate.Prescription(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// HasOwner applies the HasEdge predicate on the "owner" edge.
+func HasOwner() predicate.Prescription {
+	return predicate.Prescription(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, OwnerTable, OwnerColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasOwnerWith applies the HasEdge predicate on the "owner" edge with a given conditions (other predicates).
+func HasOwnerWith(preds ...predicate.User) predicate.Prescription {
+	return predicate.Prescription(func(s *sql.Selector) {
+		step := newOwnerStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasOffers applies the HasEdge predicate on the "offers" edge.
+func HasOffers() predicate.Prescription {
+	return predicate.Prescription(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, OffersTable, OffersColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasOffersWith applies the HasEdge predicate on the "offers" edge with a given conditions (other predicates).
+func HasOffersWith(preds ...predicate.Offer) predicate.Prescription {
+	return predicate.Prescription(func(s *sql.Selector) {
+		step := newOffersStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
 }
 
 // And groups predicates with the AND operator between them.

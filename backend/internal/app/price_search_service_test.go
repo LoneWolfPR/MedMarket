@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -17,13 +18,31 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
 )
 
-// newPriceSearchService constructs a PriceSearchService with the given fakes and
-// a discard logger.
+// testOfferTTL is the TTL every price-search test is built with; tests asserting
+// expiry compare against it rather than the production default.
+const testOfferTTL = 15 * time.Minute
+
+// newPriceSearchService constructs a PriceSearchService with the given fakes, a
+// discard logger, and an offer repo that stands in for the DB assigning an id.
+// Tests needing to observe or fail offer persistence use newPriceSearchServiceWithOffers.
 func newPriceSearchService(
 	t *testing.T,
 	rxRepo outbound.PrescriptionRepository,
 	pharmRepo outbound.PharmacyRepository,
 	searcher outbound.PriceSearcher,
+) *app.PriceSearchService {
+	t.Helper()
+	return newPriceSearchServiceWithOffers(t, rxRepo, pharmRepo, searcher, offerRepoAssigningID())
+}
+
+// newPriceSearchServiceWithOffers is newPriceSearchService with the offer repo
+// under the test's control.
+func newPriceSearchServiceWithOffers(
+	t *testing.T,
+	rxRepo outbound.PrescriptionRepository,
+	pharmRepo outbound.PharmacyRepository,
+	searcher outbound.PriceSearcher,
+	offerRepo outbound.OfferRepository,
 ) *app.PriceSearchService {
 	t.Helper()
 
@@ -32,6 +51,8 @@ func newPriceSearchService(
 		RxRepo:    rxRepo,
 		PharmRepo: pharmRepo,
 		Searcher:  searcher,
+		OfferRepo: offerRepo,
+		OfferTTL:  testOfferTTL,
 	})
 	require.NoError(t, err)
 	return svc
@@ -92,12 +113,34 @@ func TestNewPriceSearchService_Validation(t *testing.T) {
 	rxRepo := fakePrescriptionRepo{}
 	pharmRepo := fakePharmacyRepo{}
 	searcher := fakePriceSearcher{}
+	offerRepo := fakeOfferRepo{}
+	ttl := testOfferTTL
 
 	tests := map[string]app.NewPriceSearchServiceParams{
-		"missing logger":         {RxRepo: rxRepo, PharmRepo: pharmRepo, Searcher: searcher},
-		"missing rx repo":        {Logger: logger, PharmRepo: pharmRepo, Searcher: searcher},
-		"missing pharmacy repo":  {Logger: logger, RxRepo: rxRepo, Searcher: searcher},
-		"missing price searcher": {Logger: logger, RxRepo: rxRepo, PharmRepo: pharmRepo},
+		"missing logger": {
+			RxRepo: rxRepo, PharmRepo: pharmRepo, Searcher: searcher, OfferRepo: offerRepo, OfferTTL: ttl,
+		},
+		"missing rx repo": {
+			Logger: logger, PharmRepo: pharmRepo, Searcher: searcher, OfferRepo: offerRepo, OfferTTL: ttl,
+		},
+		"missing pharmacy repo": {
+			Logger: logger, RxRepo: rxRepo, Searcher: searcher, OfferRepo: offerRepo, OfferTTL: ttl,
+		},
+		"missing price searcher": {
+			Logger: logger, RxRepo: rxRepo, PharmRepo: pharmRepo, OfferRepo: offerRepo, OfferTTL: ttl,
+		},
+		"missing offer repo": {
+			Logger: logger, RxRepo: rxRepo, PharmRepo: pharmRepo, Searcher: searcher, OfferTTL: ttl,
+		},
+		// A zero TTL is what an unset field looks like, and it would mint offers
+		// that expire the instant they are created.
+		"zero offer ttl": {
+			Logger: logger, RxRepo: rxRepo, PharmRepo: pharmRepo, Searcher: searcher, OfferRepo: offerRepo,
+		},
+		"negative offer ttl": {
+			Logger: logger, RxRepo: rxRepo, PharmRepo: pharmRepo, Searcher: searcher, OfferRepo: offerRepo,
+			OfferTTL: -time.Minute,
+		},
 	}
 	for name, params := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -334,6 +377,141 @@ func TestGetQuoteList_UnknownPharmacyIsSkipped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, views, 1)
 	assert.Equal(t, "Known Pharmacy", views[0].PharmacyName)
+}
+
+// --- GetQuoteList: offer persistence ----------------------------------------
+
+func TestGetQuoteList_PersistsAnOfferPerQuote(t *testing.T) {
+	// Each returned quote is persisted as an offer built from that quote, tied to
+	// the prescription, and stamped now+TTL. The view carries the resulting id so
+	// the client can order against the price it was shown.
+	owner := uuid.New()
+	rx := buildRx(t, owner)
+	rxRepo := fakePrescriptionRepo{
+		getByIDFn: func(context.Context, uuid.UUID) (*prescription.Prescription, error) {
+			return &rx, nil
+		},
+	}
+
+	pharmID := uuid.New()
+	pharmRepo := fakePharmacyRepo{
+		listFn: func(context.Context) ([]pharmacy.Pharmacy, error) {
+			return []pharmacy.Pharmacy{buildPharmacy(t, pharmID, "mock-pharmacy-a", "Mock Pharmacy A")}, nil
+		},
+	}
+	searcher := fakePriceSearcher{
+		searchFn: func(context.Context, pharmacy.SearchCriteria) ([]pharmacy.PriceQuote, error) {
+			return []pharmacy.PriceQuote{buildQuote(t, pharmID, "sku-1", 880)}, nil
+		},
+	}
+
+	var saved []pharmacy.Offer
+	assignedID := uuid.New()
+	offerRepo := fakeOfferRepo{
+		createFn: func(_ context.Context, o *pharmacy.Offer) (*pharmacy.Offer, error) {
+			saved = append(saved, *o)
+			out := *o
+			out.ID = assignedID
+			return &out, nil
+		},
+	}
+	svc := newPriceSearchServiceWithOffers(t, rxRepo, pharmRepo, searcher, offerRepo)
+
+	before := time.Now()
+	views, err := svc.GetQuoteList(context.Background(), owner, rx.ID)
+	require.NoError(t, err)
+
+	require.Len(t, saved, 1)
+	assert.Equal(t, rx.ID, saved[0].PrescriptionID)
+	assert.Equal(t, int64(880), saved[0].Quote.Price().Cents())
+	assert.Equal(t, "sku-1", saved[0].Quote.PharmacyItemID())
+	assert.Equal(t, pharmID, saved[0].Quote.PharmacyID())
+	// Expiry is now+TTL, so it lands between the TTL measured before and after the
+	// call. A wrong or unset TTL (the field-drop bug) fails this.
+	assert.WithinRange(t, saved[0].ExpiresAt, before.Add(testOfferTTL), time.Now().Add(testOfferTTL))
+
+	require.Len(t, views, 1)
+	assert.Equal(t, assignedID, views[0].OfferID, "the view carries the DB-assigned offer id")
+}
+
+func TestGetQuoteList_QuoteIsSkippedWhenOfferCannotBePersisted(t *testing.T) {
+	// A quote whose offer fails to save has no id to order against, so returning it
+	// would hand the client something it cannot act on. The good quote still lands.
+	owner := uuid.New()
+	rx := buildRx(t, owner)
+	rxRepo := fakePrescriptionRepo{
+		getByIDFn: func(context.Context, uuid.UUID) (*prescription.Prescription, error) {
+			return &rx, nil
+		},
+	}
+
+	goodID, badID := uuid.New(), uuid.New()
+	pharmRepo := fakePharmacyRepo{
+		listFn: func(context.Context) ([]pharmacy.Pharmacy, error) {
+			return []pharmacy.Pharmacy{
+				buildPharmacy(t, goodID, "mock-pharmacy-a", "Good Pharmacy"),
+				buildPharmacy(t, badID, "mock-pharmacy-b", "Doomed Pharmacy"),
+			}, nil
+		},
+	}
+	searcher := fakePriceSearcher{
+		searchFn: func(context.Context, pharmacy.SearchCriteria) ([]pharmacy.PriceQuote, error) {
+			return []pharmacy.PriceQuote{
+				buildQuote(t, goodID, "sku-1", 880),
+				buildQuote(t, badID, "code-1", 1161),
+			}, nil
+		},
+	}
+	offerRepo := fakeOfferRepo{
+		createFn: func(_ context.Context, o *pharmacy.Offer) (*pharmacy.Offer, error) {
+			if o.Quote.PharmacyID() == badID {
+				return nil, errBoom
+			}
+			out := *o
+			out.ID = uuid.New()
+			return &out, nil
+		},
+	}
+	svc := newPriceSearchServiceWithOffers(t, rxRepo, pharmRepo, searcher, offerRepo)
+
+	views, err := svc.GetQuoteList(context.Background(), owner, rx.ID)
+	require.NoError(t, err, "one unpersistable quote must not fail the whole search")
+	require.Len(t, views, 1)
+	assert.Equal(t, "Good Pharmacy", views[0].PharmacyName)
+	assert.NotEqual(t, uuid.Nil, views[0].OfferID)
+}
+
+func TestGetQuoteList_QuoteIsSkippedWhenOfferCannotBeBuilt(t *testing.T) {
+	// A zero-value quote cannot become an offer (NewOffer rejects it), so the quote
+	// is dropped before it ever reaches the repo.
+	owner := uuid.New()
+	rx := buildRx(t, owner)
+	rxRepo := fakePrescriptionRepo{
+		getByIDFn: func(context.Context, uuid.UUID) (*prescription.Prescription, error) {
+			return &rx, nil
+		},
+	}
+	pharmRepo := fakePharmacyRepo{
+		listFn: func(context.Context) ([]pharmacy.Pharmacy, error) {
+			return []pharmacy.Pharmacy{buildPharmacy(t, uuid.Nil, "mock-pharmacy-a", "Zero Pharmacy")}, nil
+		},
+	}
+	searcher := fakePriceSearcher{
+		searchFn: func(context.Context, pharmacy.SearchCriteria) ([]pharmacy.PriceQuote, error) {
+			return []pharmacy.PriceQuote{{}}, nil // zero value: never built by a constructor
+		},
+	}
+	offerRepo := fakeOfferRepo{
+		createFn: func(context.Context, *pharmacy.Offer) (*pharmacy.Offer, error) {
+			t.Fatal("an offer must not be persisted for a quote that cannot build one")
+			return nil, nil
+		},
+	}
+	svc := newPriceSearchServiceWithOffers(t, rxRepo, pharmRepo, searcher, offerRepo)
+
+	views, err := svc.GetQuoteList(context.Background(), owner, rx.ID)
+	require.NoError(t, err)
+	assert.Empty(t, views)
 }
 
 func TestGetQuoteList_NoQuotesYieldsEmptySlice(t *testing.T) {

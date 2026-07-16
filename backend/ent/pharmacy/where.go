@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/predicate"
 	"github.com/google/uuid"
 )
@@ -923,6 +924,29 @@ func UpdatedAtLT(v time.Time) predicate.Pharmacy {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.Pharmacy {
 	return predicate.Pharmacy(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// HasOffers applies the HasEdge predicate on the "offers" edge.
+func HasOffers() predicate.Pharmacy {
+	return predicate.Pharmacy(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, OffersTable, OffersColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasOffersWith applies the HasEdge predicate on the "offers" edge with a given conditions (other predicates).
+func HasOffersWith(preds ...predicate.Offer) predicate.Pharmacy {
+	return predicate.Pharmacy(func(s *sql.Selector) {
+		step := newOffersStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
 }
 
 // And groups predicates with the AND operator between them.

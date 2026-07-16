@@ -4,14 +4,7 @@ package postgres_test
 
 import (
 	"context"
-	"database/sql"
-	"log/slog"
 	"testing"
-	"time"
-
-	"entgo.io/ent/dialect"
-	entsql "entgo.io/ent/dialect/sql"
-	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/LoneWolfPR/MedMarket/backend/ent"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/postgres"
@@ -22,48 +15,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// setupPrescriptionRepo spins up a throwaway Postgres, builds the Ent schema,
-// and returns a repository wired to it. Prescriptions have no unique
+// setupPrescriptionRepo returns a prescription repository wired to a throwaway
+// Postgres, plus the client behind it so tests can seed the user rows that
+// prescriptions.user_id foreign-keys to. Prescriptions have no unique
 // constraints, so one container is safely shared across the subtests.
-func setupPrescriptionRepo(t *testing.T) *postgres.PrescriptionRepository {
+func setupPrescriptionRepo(t *testing.T) (*postgres.PrescriptionRepository, *ent.Client) {
 	t.Helper()
-	ctx := context.Background()
 
-	container, err := tcpostgres.Run(ctx, "postgres:17-alpine",
-		tcpostgres.WithDatabase("medmarket_test"),
-		tcpostgres.WithUsername("test"),
-		tcpostgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second),
-		),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = testcontainers.TerminateContainer(container) })
-
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	db, err := sql.Open("pgx", connStr)
-	require.NoError(t, err)
-
-	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db)))
-	t.Cleanup(func() { _ = client.Close() })
-
-	require.NoError(t, client.Schema.Create(ctx))
-
+	client := newTestClient(t)
 	repo, err := postgres.NewPrescriptionRepository(postgres.NewPrescriptionRepositoryParams{
 		Client: client,
-		Logger: slog.New(slog.DiscardHandler),
+		Logger: discardLogger(),
 	})
 	require.NoError(t, err)
-	return repo
+	return repo, client
 }
 
 // newDomainPrescription builds a valid domain prescription for persistence.
@@ -85,11 +52,11 @@ func newDomainPrescription(t *testing.T, userID uuid.UUID, docKey string) *presc
 }
 
 func TestPrescriptionRepository(t *testing.T) {
-	repo := setupPrescriptionRepo(t)
+	repo, client := setupPrescriptionRepo(t)
 	ctx := context.Background()
 
 	t.Run("create assigns an ID and round-trips via GetByID", func(t *testing.T) {
-		userID := uuid.New()
+		userID := seedUser(t, client)
 		created, err := repo.Create(ctx, newDomainPrescription(t, userID, "prescriptions/a/1.pdf"))
 		require.NoError(t, err)
 		assert.NotEqual(t, uuid.Nil, created.ID, "Create should surface the DB-assigned ID")
@@ -107,8 +74,8 @@ func TestPrescriptionRepository(t *testing.T) {
 	})
 
 	t.Run("List returns only the given user's prescriptions", func(t *testing.T) {
-		userA := uuid.New()
-		userB := uuid.New()
+		userA := seedUser(t, client)
+		userB := seedUser(t, client)
 		_, err := repo.Create(ctx, newDomainPrescription(t, userA, "prescriptions/a/1.pdf"))
 		require.NoError(t, err)
 		_, err = repo.Create(ctx, newDomainPrescription(t, userA, "prescriptions/a/2.pdf"))

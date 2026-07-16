@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/prescription"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/user"
 	"github.com/google/uuid"
 )
 
@@ -35,8 +36,42 @@ type Prescription struct {
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
-	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the PrescriptionQuery when eager-loading is set.
+	Edges        PrescriptionEdges `json:"edges"`
 	selectValues sql.SelectValues
+}
+
+// PrescriptionEdges holds the relations/edges for other nodes in the graph.
+type PrescriptionEdges struct {
+	// Owner holds the value of the owner edge.
+	Owner *User `json:"owner,omitempty"`
+	// Offers holds the value of the offers edge.
+	Offers []*Offer `json:"offers,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [2]bool
+}
+
+// OwnerOrErr returns the Owner value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e PrescriptionEdges) OwnerOrErr() (*User, error) {
+	if e.Owner != nil {
+		return e.Owner, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
+	}
+	return nil, &NotLoadedError{edge: "owner"}
+}
+
+// OffersOrErr returns the Offers value or an error if the edge
+// was not loaded in eager-loading.
+func (e PrescriptionEdges) OffersOrErr() ([]*Offer, error) {
+	if e.loadedTypes[1] {
+		return e.Offers, nil
+	}
+	return nil, &NotLoadedError{edge: "offers"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -138,6 +173,16 @@ func (_m *Prescription) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *Prescription) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
+}
+
+// QueryOwner queries the "owner" edge of the Prescription entity.
+func (_m *Prescription) QueryOwner() *UserQuery {
+	return NewPrescriptionClient(_m.config).QueryOwner(_m)
+}
+
+// QueryOffers queries the "offers" edge of the Prescription entity.
+func (_m *Prescription) QueryOffers() *OfferQuery {
+	return NewPrescriptionClient(_m.config).QueryOffers(_m)
 }
 
 // Update returns a builder for updating this Prescription.

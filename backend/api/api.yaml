@@ -287,8 +287,15 @@ components:
 
     QuoteResponse:
       type: object
-      required: [pharmacyId, pharmacyName, pharmacyItemId, unitPriceCents, totalCents]
+      required: [offerId, pharmacyId, pharmacyName, pharmacyItemId, unitPriceCents, totalCents]
       properties:
+        offerId:
+          type: string
+          format: uuid
+          description: >-
+            The offer this quote was persisted as. Orders reference it by id so the
+            customer is charged the price that was quoted here, rather than whatever
+            the pharmacy re-quotes at order time. Valid until the offer expires.
         pharmacyId:
           type: string
           format: uuid

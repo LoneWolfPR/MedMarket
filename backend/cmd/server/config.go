@@ -7,6 +7,7 @@ import (
 )
 
 const defaultJWTTTL = 24 * time.Hour
+const defaultOfferTTL = time.Hour
 
 type config struct {
 	DatabaseURL         string
@@ -25,6 +26,7 @@ type config struct {
 	MinioBucket         string
 	MinioUseSSL         bool
 	TemporalHostPort    string
+	OfferTTL            time.Duration
 }
 
 func loadConfig() (config, error) {
@@ -46,6 +48,7 @@ func loadConfig() (config, error) {
 		MinioBucket:         r.Require(envkeys.MinioBucket),
 		MinioUseSSL:         r.RequireBool(envkeys.MinioUseSSL),
 		TemporalHostPort:    r.Require(envkeys.TemporalHostPort),
+		OfferTTL:            r.PositiveDurationOr(envkeys.OfferTTL, defaultOfferTTL),
 	}
 	if err := r.Err(); err != nil {
 		return config{}, err

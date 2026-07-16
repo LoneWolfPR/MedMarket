@@ -37,10 +37,6 @@ tasks:
 
   generate:
     desc: Regenerate the Ent client from schema definitions
-    # GOWORK=off: Ent's codegen uses `-mod=mod`, which Go forbids in workspace
-    # mode (go.work at repo root). Quoted so YAML keeps it the string "off".
-    env:
-      GOWORK: 'off'
     cmds:
       - go generate ./ent
 

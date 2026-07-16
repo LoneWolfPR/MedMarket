@@ -48,17 +48,22 @@ func NewPriceQuote(p NewPriceQuoteParams) (PriceQuote, error) {
 	}, nil
 }
 
+// IsZero checks for an empty PriceQuote
+func (q PriceQuote) IsZero() bool {
+	return q == PriceQuote{}
+}
+
 // Price is a getter
-func (q *PriceQuote) Price() shared.Money {
+func (q PriceQuote) Price() shared.Money {
 	return q.price
 }
 
 // PharmacyID is a getter
-func (q *PriceQuote) PharmacyID() uuid.UUID {
+func (q PriceQuote) PharmacyID() uuid.UUID {
 	return q.pharmacyID
 }
 
 // PharmacyItemID is a getter
-func (q *PriceQuote) PharmacyItemID() string {
+func (q PriceQuote) PharmacyItemID() string {
 	return q.pharmacyItemID
 }

@@ -78,6 +78,15 @@ func run() error {
 		return fmt.Errorf("error seeding pharmacy data: %w", err)
 	}
 
+	// Setup Offer Repo
+	offerRepo, err := postgres.NewOfferRepository(postgres.NewOfferRepositoryParams{
+		Client: client,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("error creation offer repo: %w", err)
+	}
+
 	// Setup Temporal. The API only starts price-search workflows; the worker
 	// executes them, so no worker/activity registration happens here.
 	temporalClient, err := temporalclient.Dial(temporalclient.Options{
@@ -145,6 +154,8 @@ func run() error {
 		RxRepo:    rxRepo,
 		PharmRepo: pharmacyRepo,
 		Searcher:  priceSearcher,
+		OfferRepo: offerRepo,
+		OfferTTL:  cfg.OfferTTL,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to set up price search service: %w", err)

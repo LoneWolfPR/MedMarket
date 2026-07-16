@@ -76,7 +76,12 @@ func buildQuoteView(t *testing.T, pharmacyName, itemID string, unitCents, totalC
 	total, err := shared.NewMoneyFromCents(totalCents)
 	require.NoError(t, err)
 
-	return inbound.QuoteView{Quote: quote, PharmacyName: pharmacyName, Total: total}
+	return inbound.QuoteView{
+		OfferID:      uuid.New(),
+		Quote:        quote,
+		PharmacyName: pharmacyName,
+		Total:        total,
+	}
 }
 
 // searchPath builds the search route for a prescription id.
@@ -134,8 +139,12 @@ func TestSearchRoute_Success(t *testing.T) {
 	assert.Equal(t, int64(880), resp[0].UnitPriceCents)
 	assert.Equal(t, int64(26400), resp[0].TotalCents)
 	assert.Equal(t, views[0].Quote.PharmacyID(), resp[0].PharmacyId)
+	// The offer id is what POST /api/orders references, so a quote must carry the
+	// one its own view was built with — not the other quote's, and not the zero uuid.
+	assert.Equal(t, views[0].OfferID, resp[0].OfferId)
 	assert.Equal(t, "Mock Pharmacy B", resp[1].PharmacyName)
 	assert.Equal(t, int64(1161), resp[1].UnitPriceCents)
+	assert.Equal(t, views[1].OfferID, resp[1].OfferId)
 }
 
 func TestSearchRoute_NoQuotesYieldsEmptyJSONArray(t *testing.T) {

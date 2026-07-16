@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/google/uuid"
 )
 
@@ -40,8 +41,17 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// EdgeOffers holds the string denoting the offers edge name in mutations.
+	EdgeOffers = "offers"
 	// Table holds the table name of the pharmacy in the database.
 	Table = "pharmacies"
+	// OffersTable is the table that holds the offers relation/edge.
+	OffersTable = "offers"
+	// OffersInverseTable is the table name for the Offer entity.
+	// It exists in this package in order to avoid circular dependency with the "offer" package.
+	OffersInverseTable = "offers"
+	// OffersColumn is the table column denoting the offers relation/edge.
+	OffersColumn = "pharmacy_id"
 )
 
 // Columns holds all SQL columns for pharmacy fields.
@@ -174,4 +184,25 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByOffersCount orders the results by offers count.
+func ByOffersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newOffersStep(), opts...)
+	}
+}
+
+// ByOffers orders the results by offers terms.
+func ByOffers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newOffersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+func newOffersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(OffersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, OffersTable, OffersColumn),
+	)
 }

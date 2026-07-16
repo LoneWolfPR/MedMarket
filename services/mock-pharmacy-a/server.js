@@ -51,6 +51,16 @@ app.post("/api/v1/search", async (req, res) => {
   res.json({ results });
 });
 
+// Pharmacy A takes the destination as a flat `shipping` object with its own
+// field names — pharmacy B nests the same data under `recipient` with
+// different keys. street2 is the only optional field.
+const requiredShippingFields = ["name", "street1", "city", "state", "zip"];
+
+const missingShippingFields = (shipping) =>
+  requiredShippingFields.filter(
+    (f) => typeof shipping?.[f] !== "string" || shipping[f].trim() === "",
+  );
+
 // Order confirms against a SKU and returns a tracking id the backend can
 // later register with the shipping service.
 app.post("/api/v1/order", async (req, res) => {
@@ -58,7 +68,11 @@ app.post("/api/v1/order", async (req, res) => {
   if (Math.random() < ERROR_RATE) {
     return res.status(500).json({ error: "internal_error" });
   }
-  const { sku, quantity = 1 } = req.body ?? {};
+  const { sku, quantity = 1, shipping } = req.body ?? {};
+  const missing = missingShippingFields(shipping);
+  if (missing.length > 0) {
+    return res.status(400).json({ error: "invalid_shipping", missing });
+  }
   const item = catalog.find((m) => m.sku === sku);
   if (!item) {
     return res.status(404).json({ error: "unknown_sku" });

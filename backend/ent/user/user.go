@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/google/uuid"
 )
 
@@ -38,8 +39,17 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// EdgePrescriptions holds the string denoting the prescriptions edge name in mutations.
+	EdgePrescriptions = "prescriptions"
 	// Table holds the table name of the user in the database.
 	Table = "users"
+	// PrescriptionsTable is the table that holds the prescriptions relation/edge.
+	PrescriptionsTable = "prescriptions"
+	// PrescriptionsInverseTable is the table name for the Prescription entity.
+	// It exists in this package in order to avoid circular dependency with the "prescription" package.
+	PrescriptionsInverseTable = "prescriptions"
+	// PrescriptionsColumn is the table column denoting the prescriptions relation/edge.
+	PrescriptionsColumn = "user_id"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -154,4 +164,25 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByPrescriptionsCount orders the results by prescriptions count.
+func ByPrescriptionsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newPrescriptionsStep(), opts...)
+	}
+}
+
+// ByPrescriptions orders the results by prescriptions terms.
+func ByPrescriptions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newPrescriptionsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+func newPrescriptionsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(PrescriptionsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, PrescriptionsTable, PrescriptionsColumn),
+	)
 }

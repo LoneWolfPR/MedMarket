@@ -22,4 +22,5 @@ const (
 	TemporalHostPort    = "TEMPORAL_HOSTPORT"
 	PharmacyASecret     = "PHARMACY_A_SECRET" //nolint:gosec // G101: env var name, not a credential
 	PharmacyBSecret     = "PHARMACY_B_SECRET" //nolint:gosec // G101: env var name, not a credential
+	OfferTTL            = "OFFER_TTL"
 )

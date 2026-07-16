@@ -4,16 +4,8 @@ package postgres_test
 
 import (
 	"context"
-	"database/sql"
-	"log/slog"
 	"testing"
-	"time"
 
-	"entgo.io/ent/dialect"
-	entsql "entgo.io/ent/dialect/sql"
-	_ "github.com/jackc/pgx/v5/stdlib"
-
-	"github.com/LoneWolfPR/MedMarket/backend/ent"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/postgres"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
@@ -22,47 +14,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 const validHash = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 
-// setupRepo spins up a throwaway Postgres, builds the Ent schema into it, and
-// returns a repository wired to it. One container is shared across the subtests
-// of a single top-level test; t.Cleanup tears everything down.
+// setupRepo returns a user repository wired to a throwaway Postgres. One
+// container is shared across the subtests of a single top-level test; the only
+// unique column (email) is easily varied per case.
 func setupRepo(t *testing.T) *postgres.UserRepository {
 	t.Helper()
-	ctx := context.Background()
-
-	container, err := tcpostgres.Run(ctx, "postgres:17-alpine",
-		tcpostgres.WithDatabase("medmarket_test"),
-		tcpostgres.WithUsername("test"),
-		tcpostgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second),
-		),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = testcontainers.TerminateContainer(container) })
-
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	db, err := sql.Open("pgx", connStr)
-	require.NoError(t, err)
-
-	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db)))
-	t.Cleanup(func() { _ = client.Close() })
-
-	require.NoError(t, client.Schema.Create(ctx))
 
 	repo, err := postgres.NewUserRepository(postgres.NewUserRepositoryParams{
-		Client: client,
-		Logger: slog.New(slog.DiscardHandler),
+		Client: newTestClient(t),
+		Logger: discardLogger(),
 	})
 	require.NoError(t, err)
 	return repo

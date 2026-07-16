@@ -11,8 +11,10 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/offer"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/predicate"
+	"github.com/google/uuid"
 )
 
 // PharmacyUpdate is the builder for updating Pharmacy entities.
@@ -194,9 +196,45 @@ func (_u *PharmacyUpdate) SetUpdatedAt(v time.Time) *PharmacyUpdate {
 	return _u
 }
 
+// AddOfferIDs adds the "offers" edge to the Offer entity by IDs.
+func (_u *PharmacyUpdate) AddOfferIDs(ids ...uuid.UUID) *PharmacyUpdate {
+	_u.mutation.AddOfferIDs(ids...)
+	return _u
+}
+
+// AddOffers adds the "offers" edges to the Offer entity.
+func (_u *PharmacyUpdate) AddOffers(v ...*Offer) *PharmacyUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddOfferIDs(ids...)
+}
+
 // Mutation returns the PharmacyMutation object of the builder.
 func (_u *PharmacyUpdate) Mutation() *PharmacyMutation {
 	return _u.mutation
+}
+
+// ClearOffers clears all "offers" edges to the Offer entity.
+func (_u *PharmacyUpdate) ClearOffers() *PharmacyUpdate {
+	_u.mutation.ClearOffers()
+	return _u
+}
+
+// RemoveOfferIDs removes the "offers" edge to Offer entities by IDs.
+func (_u *PharmacyUpdate) RemoveOfferIDs(ids ...uuid.UUID) *PharmacyUpdate {
+	_u.mutation.RemoveOfferIDs(ids...)
+	return _u
+}
+
+// RemoveOffers removes "offers" edges to Offer entities.
+func (_u *PharmacyUpdate) RemoveOffers(v ...*Offer) *PharmacyUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveOfferIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -340,6 +378,51 @@ func (_u *PharmacyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(pharmacy.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.OffersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   pharmacy.OffersTable,
+			Columns: []string{pharmacy.OffersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(offer.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedOffersIDs(); len(nodes) > 0 && !_u.mutation.OffersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   pharmacy.OffersTable,
+			Columns: []string{pharmacy.OffersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(offer.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OffersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   pharmacy.OffersTable,
+			Columns: []string{pharmacy.OffersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(offer.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -527,9 +610,45 @@ func (_u *PharmacyUpdateOne) SetUpdatedAt(v time.Time) *PharmacyUpdateOne {
 	return _u
 }
 
+// AddOfferIDs adds the "offers" edge to the Offer entity by IDs.
+func (_u *PharmacyUpdateOne) AddOfferIDs(ids ...uuid.UUID) *PharmacyUpdateOne {
+	_u.mutation.AddOfferIDs(ids...)
+	return _u
+}
+
+// AddOffers adds the "offers" edges to the Offer entity.
+func (_u *PharmacyUpdateOne) AddOffers(v ...*Offer) *PharmacyUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddOfferIDs(ids...)
+}
+
 // Mutation returns the PharmacyMutation object of the builder.
 func (_u *PharmacyUpdateOne) Mutation() *PharmacyMutation {
 	return _u.mutation
+}
+
+// ClearOffers clears all "offers" edges to the Offer entity.
+func (_u *PharmacyUpdateOne) ClearOffers() *PharmacyUpdateOne {
+	_u.mutation.ClearOffers()
+	return _u
+}
+
+// RemoveOfferIDs removes the "offers" edge to Offer entities by IDs.
+func (_u *PharmacyUpdateOne) RemoveOfferIDs(ids ...uuid.UUID) *PharmacyUpdateOne {
+	_u.mutation.RemoveOfferIDs(ids...)
+	return _u
+}
+
+// RemoveOffers removes "offers" edges to Offer entities.
+func (_u *PharmacyUpdateOne) RemoveOffers(v ...*Offer) *PharmacyUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveOfferIDs(ids...)
 }
 
 // Where appends a list predicates to the PharmacyUpdate builder.
@@ -703,6 +822,51 @@ func (_u *PharmacyUpdateOne) sqlSave(ctx context.Context) (_node *Pharmacy, err 
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(pharmacy.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.OffersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   pharmacy.OffersTable,
+			Columns: []string{pharmacy.OffersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(offer.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedOffersIDs(); len(nodes) > 0 && !_u.mutation.OffersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   pharmacy.OffersTable,
+			Columns: []string{pharmacy.OffersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(offer.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OffersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   pharmacy.OffersTable,
+			Columns: []string{pharmacy.OffersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(offer.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &Pharmacy{config: _u.config}
 	_spec.Assign = _node.assignValues

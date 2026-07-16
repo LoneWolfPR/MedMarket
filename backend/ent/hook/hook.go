@@ -9,6 +9,18 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/ent"
 )
 
+// The OfferFunc type is an adapter to allow the use of ordinary
+// function as Offer mutator.
+type OfferFunc func(context.Context, *ent.OfferMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f OfferFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.OfferMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.OfferMutation", m)
+}
+
 // The PharmacyFunc type is an adapter to allow the use of ordinary
 // function as Pharmacy mutator.
 type PharmacyFunc func(context.Context, *ent.PharmacyMutation) (ent.Value, error)

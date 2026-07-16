@@ -123,3 +123,29 @@ func (f fakePriceSearcher) Search(
 ) ([]pharmacy.PriceQuote, error) {
 	return f.searchFn(ctx, criteria)
 }
+
+type fakeOfferRepo struct {
+	createFn  func(ctx context.Context, o *pharmacy.Offer) (*pharmacy.Offer, error)
+	getByIDFn func(ctx context.Context, id uuid.UUID) (*pharmacy.Offer, error)
+}
+
+func (f fakeOfferRepo) Create(ctx context.Context, o *pharmacy.Offer) (*pharmacy.Offer, error) {
+	return f.createFn(ctx, o)
+}
+
+func (f fakeOfferRepo) GetByID(ctx context.Context, id uuid.UUID) (*pharmacy.Offer, error) {
+	return f.getByIDFn(ctx, id)
+}
+
+// offerRepoAssigningID is the default offer repo for price-search tests: it
+// stands in for the database assigning a primary key on insert, which is the
+// only part of Create the service depends on.
+func offerRepoAssigningID() fakeOfferRepo {
+	return fakeOfferRepo{
+		createFn: func(_ context.Context, o *pharmacy.Offer) (*pharmacy.Offer, error) {
+			saved := *o
+			saved.ID = uuid.New()
+			return &saved, nil
+		},
+	}
+}

@@ -8,6 +8,49 @@ import (
 )
 
 var (
+	// OffersColumns holds the columns for the "offers" table.
+	OffersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID, Default: schema.Expr("gen_random_uuid()")},
+		{Name: "price_cents", Type: field.TypeInt64},
+		{Name: "pharmacy_item_id", Type: field.TypeString},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "created_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "pharmacy_id", Type: field.TypeUUID},
+		{Name: "prescription_id", Type: field.TypeUUID},
+	}
+	// OffersTable holds the schema information for the "offers" table.
+	OffersTable = &schema.Table{
+		Name:       "offers",
+		Columns:    OffersColumns,
+		PrimaryKey: []*schema.Column{OffersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "offers_pharmacies_offers",
+				Columns:    []*schema.Column{OffersColumns[6]},
+				RefColumns: []*schema.Column{PharmaciesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "offers_prescriptions_offers",
+				Columns:    []*schema.Column{OffersColumns[7]},
+				RefColumns: []*schema.Column{PrescriptionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "offer_prescription_id",
+				Unique:  false,
+				Columns: []*schema.Column{OffersColumns[7]},
+			},
+			{
+				Name:    "offer_pharmacy_id",
+				Unique:  false,
+				Columns: []*schema.Column{OffersColumns[6]},
+			},
+		},
+	}
 	// PharmaciesColumns holds the columns for the "pharmacies" table.
 	PharmaciesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID, Default: schema.Expr("gen_random_uuid()")},
@@ -34,7 +77,6 @@ var (
 	// PrescriptionsColumns holds the columns for the "prescriptions" table.
 	PrescriptionsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID, Default: schema.Expr("gen_random_uuid()")},
-		{Name: "user_id", Type: field.TypeUUID},
 		{Name: "document_key", Type: field.TypeString},
 		{Name: "physician_name", Type: field.TypeString},
 		{Name: "med_name", Type: field.TypeString},
@@ -43,17 +85,26 @@ var (
 		{Name: "quantity", Type: field.TypeInt},
 		{Name: "created_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
 		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "user_id", Type: field.TypeUUID},
 	}
 	// PrescriptionsTable holds the schema information for the "prescriptions" table.
 	PrescriptionsTable = &schema.Table{
 		Name:       "prescriptions",
 		Columns:    PrescriptionsColumns,
 		PrimaryKey: []*schema.Column{PrescriptionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "prescriptions_users_prescriptions",
+				Columns:    []*schema.Column{PrescriptionsColumns[9]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
 		Indexes: []*schema.Index{
 			{
 				Name:    "prescription_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{PrescriptionsColumns[1]},
+				Columns: []*schema.Column{PrescriptionsColumns[9]},
 			},
 		},
 	}
@@ -81,6 +132,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		OffersTable,
 		PharmaciesTable,
 		PrescriptionsTable,
 		UsersTable,
@@ -88,4 +140,7 @@ var (
 )
 
 func init() {
+	OffersTable.ForeignKeys[0].RefTable = PharmaciesTable
+	OffersTable.ForeignKeys[1].RefTable = PrescriptionsTable
+	PrescriptionsTable.ForeignKeys[0].RefTable = UsersTable
 }

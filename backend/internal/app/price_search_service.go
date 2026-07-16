@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
@@ -20,6 +21,8 @@ type PriceSearchService struct {
 	rxRepo    outbound.PrescriptionRepository
 	pharmRepo outbound.PharmacyRepository
 	searcher  outbound.PriceSearcher
+	offerRepo outbound.OfferRepository
+	offerTTL  time.Duration
 }
 
 var _ inbound.PriceSearchService = (*PriceSearchService)(nil)
@@ -30,6 +33,8 @@ type NewPriceSearchServiceParams struct {
 	RxRepo    outbound.PrescriptionRepository
 	PharmRepo outbound.PharmacyRepository
 	Searcher  outbound.PriceSearcher
+	OfferRepo outbound.OfferRepository
+	OfferTTL  time.Duration
 }
 
 // NewPriceSearchService constructs the service
@@ -46,11 +51,19 @@ func NewPriceSearchService(p NewPriceSearchServiceParams) (*PriceSearchService, 
 	if p.Searcher == nil {
 		return nil, errors.New("price searcher is missing")
 	}
+	if p.OfferRepo == nil {
+		return nil, errors.New("offer repo is missing")
+	}
+	if p.OfferTTL <= 0 {
+		return nil, errors.New("offer ttl is invalid")
+	}
 	return &PriceSearchService{
 		logger:    p.Logger,
 		rxRepo:    p.RxRepo,
 		pharmRepo: p.PharmRepo,
 		searcher:  p.Searcher,
+		offerRepo: p.OfferRepo,
+		offerTTL:  p.OfferTTL,
 	}, nil
 }
 
@@ -111,6 +124,34 @@ func (s *PriceSearchService) GetQuoteList(
 			PharmacyName: currPharm,
 			Total:        total,
 		}
+		// Store the offer in the db
+		newOffer, err := pharmacy.NewOffer(pharmacy.NewOfferParams{
+			Quote:          result,
+			ExpiresAt:      time.Now().Add(s.offerTTL),
+			PrescriptionID: rxID,
+		})
+		if err != nil {
+			// log the error and skip this quote if we can't store an offer
+			s.logger.ErrorContext(
+				ctx,
+				"error creating offer",
+				"prescription id", rxID,
+				"quote", result,
+				"error", err)
+			continue
+		}
+		newOffer, err = s.offerRepo.Create(ctx, newOffer)
+		if err != nil {
+			// log the error and skip this quote if we can't store an offer
+			s.logger.ErrorContext(
+				ctx,
+				"error writing offer to db",
+				"prescription id", rxID,
+				"quote", result,
+				"error", err)
+			continue
+		}
+		newQuoteView.OfferID = newOffer.ID
 		results = append(results, newQuoteView)
 	}
 	return results, nil

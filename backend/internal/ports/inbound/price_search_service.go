@@ -11,6 +11,7 @@ import (
 
 // QuoteView contains the shape of a final price quote
 type QuoteView struct {
+	OfferID      uuid.UUID
 	Quote        pharmacy.PriceQuote
 	PharmacyName string
 	Total        shared.Money

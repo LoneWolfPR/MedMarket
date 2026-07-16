@@ -15,6 +15,8 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/offer"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/prescription"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/user"
@@ -25,6 +27,8 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// Offer is the client for interacting with the Offer builders.
+	Offer *OfferClient
 	// Pharmacy is the client for interacting with the Pharmacy builders.
 	Pharmacy *PharmacyClient
 	// Prescription is the client for interacting with the Prescription builders.
@@ -42,6 +46,7 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.Offer = NewOfferClient(c.config)
 	c.Pharmacy = NewPharmacyClient(c.config)
 	c.Prescription = NewPrescriptionClient(c.config)
 	c.User = NewUserClient(c.config)
@@ -137,6 +142,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:          ctx,
 		config:       cfg,
+		Offer:        NewOfferClient(cfg),
 		Pharmacy:     NewPharmacyClient(cfg),
 		Prescription: NewPrescriptionClient(cfg),
 		User:         NewUserClient(cfg),
@@ -159,6 +165,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:          ctx,
 		config:       cfg,
+		Offer:        NewOfferClient(cfg),
 		Pharmacy:     NewPharmacyClient(cfg),
 		Prescription: NewPrescriptionClient(cfg),
 		User:         NewUserClient(cfg),
@@ -168,7 +175,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		Pharmacy.
+//		Offer.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -190,6 +197,7 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
+	c.Offer.Use(hooks...)
 	c.Pharmacy.Use(hooks...)
 	c.Prescription.Use(hooks...)
 	c.User.Use(hooks...)
@@ -198,6 +206,7 @@ func (c *Client) Use(hooks ...Hook) {
 // Intercept adds the query interceptors to all the entity clients.
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
+	c.Offer.Intercept(interceptors...)
 	c.Pharmacy.Intercept(interceptors...)
 	c.Prescription.Intercept(interceptors...)
 	c.User.Intercept(interceptors...)
@@ -206,6 +215,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *OfferMutation:
+		return c.Offer.mutate(ctx, m)
 	case *PharmacyMutation:
 		return c.Pharmacy.mutate(ctx, m)
 	case *PrescriptionMutation:
@@ -214,6 +225,171 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.User.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// OfferClient is a client for the Offer schema.
+type OfferClient struct {
+	config
+}
+
+// NewOfferClient returns a client for the Offer from the given config.
+func NewOfferClient(c config) *OfferClient {
+	return &OfferClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `offer.Hooks(f(g(h())))`.
+func (c *OfferClient) Use(hooks ...Hook) {
+	c.hooks.Offer = append(c.hooks.Offer, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `offer.Intercept(f(g(h())))`.
+func (c *OfferClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Offer = append(c.inters.Offer, interceptors...)
+}
+
+// Create returns a builder for creating a Offer entity.
+func (c *OfferClient) Create() *OfferCreate {
+	mutation := newOfferMutation(c.config, OpCreate)
+	return &OfferCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Offer entities.
+func (c *OfferClient) CreateBulk(builders ...*OfferCreate) *OfferCreateBulk {
+	return &OfferCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *OfferClient) MapCreateBulk(slice any, setFunc func(*OfferCreate, int)) *OfferCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &OfferCreateBulk{err: fmt.Errorf("calling to OfferClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*OfferCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &OfferCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Offer.
+func (c *OfferClient) Update() *OfferUpdate {
+	mutation := newOfferMutation(c.config, OpUpdate)
+	return &OfferUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *OfferClient) UpdateOne(_m *Offer) *OfferUpdateOne {
+	mutation := newOfferMutation(c.config, OpUpdateOne, withOffer(_m))
+	return &OfferUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *OfferClient) UpdateOneID(id uuid.UUID) *OfferUpdateOne {
+	mutation := newOfferMutation(c.config, OpUpdateOne, withOfferID(id))
+	return &OfferUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Offer.
+func (c *OfferClient) Delete() *OfferDelete {
+	mutation := newOfferMutation(c.config, OpDelete)
+	return &OfferDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *OfferClient) DeleteOne(_m *Offer) *OfferDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *OfferClient) DeleteOneID(id uuid.UUID) *OfferDeleteOne {
+	builder := c.Delete().Where(offer.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &OfferDeleteOne{builder}
+}
+
+// Query returns a query builder for Offer.
+func (c *OfferClient) Query() *OfferQuery {
+	return &OfferQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeOffer},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Offer entity by its id.
+func (c *OfferClient) Get(ctx context.Context, id uuid.UUID) (*Offer, error) {
+	return c.Query().Where(offer.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *OfferClient) GetX(ctx context.Context, id uuid.UUID) *Offer {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryPrescription queries the prescription edge of a Offer.
+func (c *OfferClient) QueryPrescription(_m *Offer) *PrescriptionQuery {
+	query := (&PrescriptionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(offer.Table, offer.FieldID, id),
+			sqlgraph.To(prescription.Table, prescription.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, offer.PrescriptionTable, offer.PrescriptionColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryPharmacy queries the pharmacy edge of a Offer.
+func (c *OfferClient) QueryPharmacy(_m *Offer) *PharmacyQuery {
+	query := (&PharmacyClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(offer.Table, offer.FieldID, id),
+			sqlgraph.To(pharmacy.Table, pharmacy.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, offer.PharmacyTable, offer.PharmacyColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *OfferClient) Hooks() []Hook {
+	return c.hooks.Offer
+}
+
+// Interceptors returns the client interceptors.
+func (c *OfferClient) Interceptors() []Interceptor {
+	return c.inters.Offer
+}
+
+func (c *OfferClient) mutate(ctx context.Context, m *OfferMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&OfferCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&OfferUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&OfferUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&OfferDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Offer mutation op: %q", m.Op())
 	}
 }
 
@@ -323,6 +499,22 @@ func (c *PharmacyClient) GetX(ctx context.Context, id uuid.UUID) *Pharmacy {
 		panic(err)
 	}
 	return obj
+}
+
+// QueryOffers queries the offers edge of a Pharmacy.
+func (c *PharmacyClient) QueryOffers(_m *Pharmacy) *OfferQuery {
+	query := (&OfferClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(pharmacy.Table, pharmacy.FieldID, id),
+			sqlgraph.To(offer.Table, offer.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, pharmacy.OffersTable, pharmacy.OffersColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
 }
 
 // Hooks returns the client hooks.
@@ -458,6 +650,38 @@ func (c *PrescriptionClient) GetX(ctx context.Context, id uuid.UUID) *Prescripti
 	return obj
 }
 
+// QueryOwner queries the owner edge of a Prescription.
+func (c *PrescriptionClient) QueryOwner(_m *Prescription) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(prescription.Table, prescription.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, prescription.OwnerTable, prescription.OwnerColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryOffers queries the offers edge of a Prescription.
+func (c *PrescriptionClient) QueryOffers(_m *Prescription) *OfferQuery {
+	query := (&OfferClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(prescription.Table, prescription.FieldID, id),
+			sqlgraph.To(offer.Table, offer.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, prescription.OffersTable, prescription.OffersColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *PrescriptionClient) Hooks() []Hook {
 	return c.hooks.Prescription
@@ -591,6 +815,22 @@ func (c *UserClient) GetX(ctx context.Context, id uuid.UUID) *User {
 	return obj
 }
 
+// QueryPrescriptions queries the prescriptions edge of a User.
+func (c *UserClient) QueryPrescriptions(_m *User) *PrescriptionQuery {
+	query := (&PrescriptionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(prescription.Table, prescription.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.PrescriptionsTable, user.PrescriptionsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *UserClient) Hooks() []Hook {
 	return c.hooks.User
@@ -619,9 +859,9 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Pharmacy, Prescription, User []ent.Hook
+		Offer, Pharmacy, Prescription, User []ent.Hook
 	}
 	inters struct {
-		Pharmacy, Prescription, User []ent.Interceptor
+		Offer, Pharmacy, Prescription, User []ent.Interceptor
 	}
 )

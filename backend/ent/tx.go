@@ -12,6 +12,8 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// Offer is the client for interacting with the Offer builders.
+	Offer *OfferClient
 	// Pharmacy is the client for interacting with the Pharmacy builders.
 	Pharmacy *PharmacyClient
 	// Prescription is the client for interacting with the Prescription builders.
@@ -149,6 +151,7 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.Offer = NewOfferClient(tx.config)
 	tx.Pharmacy = NewPharmacyClient(tx.config)
 	tx.Prescription = NewPrescriptionClient(tx.config)
 	tx.User = NewUserClient(tx.config)
@@ -161,7 +164,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: Pharmacy.QueryXXX(), the query will be executed
+// applies a query, for example: Offer.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

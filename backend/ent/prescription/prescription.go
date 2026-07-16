@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/google/uuid"
 )
 
@@ -32,8 +33,26 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// EdgeOwner holds the string denoting the owner edge name in mutations.
+	EdgeOwner = "owner"
+	// EdgeOffers holds the string denoting the offers edge name in mutations.
+	EdgeOffers = "offers"
 	// Table holds the table name of the prescription in the database.
 	Table = "prescriptions"
+	// OwnerTable is the table that holds the owner relation/edge.
+	OwnerTable = "prescriptions"
+	// OwnerInverseTable is the table name for the User entity.
+	// It exists in this package in order to avoid circular dependency with the "user" package.
+	OwnerInverseTable = "users"
+	// OwnerColumn is the table column denoting the owner relation/edge.
+	OwnerColumn = "user_id"
+	// OffersTable is the table that holds the offers relation/edge.
+	OffersTable = "offers"
+	// OffersInverseTable is the table name for the Offer entity.
+	// It exists in this package in order to avoid circular dependency with the "offer" package.
+	OffersInverseTable = "offers"
+	// OffersColumn is the table column denoting the offers relation/edge.
+	OffersColumn = "prescription_id"
 )
 
 // Columns holds all SQL columns for prescription fields.
@@ -134,4 +153,39 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByOwnerField orders the results by owner field.
+func ByOwnerField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newOwnerStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByOffersCount orders the results by offers count.
+func ByOffersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newOffersStep(), opts...)
+	}
+}
+
+// ByOffers orders the results by offers terms.
+func ByOffers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newOffersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+func newOwnerStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(OwnerInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, OwnerTable, OwnerColumn),
+	)
+}
+func newOffersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(OffersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, OffersTable, OffersColumn),
+	)
 }

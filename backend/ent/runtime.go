@@ -5,6 +5,7 @@ package ent
 import (
 	"time"
 
+	"github.com/LoneWolfPR/MedMarket/backend/ent/offer"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/prescription"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/schema"
@@ -16,6 +17,30 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	offerFields := schema.Offer{}.Fields()
+	_ = offerFields
+	// offerDescPriceCents is the schema descriptor for price_cents field.
+	offerDescPriceCents := offerFields[2].Descriptor()
+	// offer.PriceCentsValidator is a validator for the "price_cents" field. It is called by the builders before save.
+	offer.PriceCentsValidator = offerDescPriceCents.Validators[0].(func(int64) error)
+	// offerDescPharmacyItemID is the schema descriptor for pharmacy_item_id field.
+	offerDescPharmacyItemID := offerFields[4].Descriptor()
+	// offer.PharmacyItemIDValidator is a validator for the "pharmacy_item_id" field. It is called by the builders before save.
+	offer.PharmacyItemIDValidator = offerDescPharmacyItemID.Validators[0].(func(string) error)
+	// offerDescCreatedAt is the schema descriptor for created_at field.
+	offerDescCreatedAt := offerFields[6].Descriptor()
+	// offer.DefaultCreatedAt holds the default value on creation for the created_at field.
+	offer.DefaultCreatedAt = offerDescCreatedAt.Default.(func() time.Time)
+	// offerDescUpdatedAt is the schema descriptor for updated_at field.
+	offerDescUpdatedAt := offerFields[7].Descriptor()
+	// offer.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	offer.DefaultUpdatedAt = offerDescUpdatedAt.Default.(func() time.Time)
+	// offer.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	offer.UpdateDefaultUpdatedAt = offerDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// offerDescID is the schema descriptor for id field.
+	offerDescID := offerFields[0].Descriptor()
+	// offer.DefaultID holds the default value on creation for the id field.
+	offer.DefaultID = offerDescID.Default.(func() uuid.UUID)
 	pharmacyFields := schema.Pharmacy{}.Fields()
 	_ = pharmacyFields
 	// pharmacyDescCode is the schema descriptor for code field.

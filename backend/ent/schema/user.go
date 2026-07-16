@@ -6,6 +6,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 )
@@ -65,5 +66,9 @@ func (User) Fields() []ent.Field {
 
 // Edges of the User.
 func (User) Edges() []ent.Edge {
-	return nil
+	return []ent.Edge{
+		// Inverse side of Prescription.owner. Declared only so Ent emits the FK
+		// constraint on prescriptions.user_id; nothing traverses it.
+		edge.To("prescriptions", Prescription.Type),
+	}
 }

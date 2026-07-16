@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -11,8 +12,10 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/offer"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/predicate"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/prescription"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/user"
 	"github.com/google/uuid"
 )
 
@@ -23,6 +26,8 @@ type PrescriptionQuery struct {
 	order      []prescription.OrderOption
 	inters     []Interceptor
 	predicates []predicate.Prescription
+	withOwner  *UserQuery
+	withOffers *OfferQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -57,6 +62,50 @@ func (_q *PrescriptionQuery) Unique(unique bool) *PrescriptionQuery {
 func (_q *PrescriptionQuery) Order(o ...prescription.OrderOption) *PrescriptionQuery {
 	_q.order = append(_q.order, o...)
 	return _q
+}
+
+// QueryOwner chains the current query on the "owner" edge.
+func (_q *PrescriptionQuery) QueryOwner() *UserQuery {
+	query := (&UserClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(prescription.Table, prescription.FieldID, selector),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, prescription.OwnerTable, prescription.OwnerColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryOffers chains the current query on the "offers" edge.
+func (_q *PrescriptionQuery) QueryOffers() *OfferQuery {
+	query := (&OfferClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(prescription.Table, prescription.FieldID, selector),
+			sqlgraph.To(offer.Table, offer.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, prescription.OffersTable, prescription.OffersColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // First returns the first Prescription entity from the query.
@@ -251,10 +300,34 @@ func (_q *PrescriptionQuery) Clone() *PrescriptionQuery {
 		order:      append([]prescription.OrderOption{}, _q.order...),
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Prescription{}, _q.predicates...),
+		withOwner:  _q.withOwner.Clone(),
+		withOffers: _q.withOffers.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
+}
+
+// WithOwner tells the query-builder to eager-load the nodes that are connected to
+// the "owner" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *PrescriptionQuery) WithOwner(opts ...func(*UserQuery)) *PrescriptionQuery {
+	query := (&UserClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withOwner = query
+	return _q
+}
+
+// WithOffers tells the query-builder to eager-load the nodes that are connected to
+// the "offers" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *PrescriptionQuery) WithOffers(opts ...func(*OfferQuery)) *PrescriptionQuery {
+	query := (&OfferClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withOffers = query
+	return _q
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -333,8 +406,12 @@ func (_q *PrescriptionQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *PrescriptionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Prescription, error) {
 	var (
-		nodes = []*Prescription{}
-		_spec = _q.querySpec()
+		nodes       = []*Prescription{}
+		_spec       = _q.querySpec()
+		loadedTypes = [2]bool{
+			_q.withOwner != nil,
+			_q.withOffers != nil,
+		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*Prescription).scanValues(nil, columns)
@@ -342,6 +419,7 @@ func (_q *PrescriptionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	_spec.Assign = func(columns []string, values []any) error {
 		node := &Prescription{config: _q.config}
 		nodes = append(nodes, node)
+		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	for i := range hooks {
@@ -353,7 +431,80 @@ func (_q *PrescriptionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := _q.withOwner; query != nil {
+		if err := _q.loadOwner(ctx, query, nodes, nil,
+			func(n *Prescription, e *User) { n.Edges.Owner = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withOffers; query != nil {
+		if err := _q.loadOffers(ctx, query, nodes,
+			func(n *Prescription) { n.Edges.Offers = []*Offer{} },
+			func(n *Prescription, e *Offer) { n.Edges.Offers = append(n.Edges.Offers, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
+}
+
+func (_q *PrescriptionQuery) loadOwner(ctx context.Context, query *UserQuery, nodes []*Prescription, init func(*Prescription), assign func(*Prescription, *User)) error {
+	ids := make([]uuid.UUID, 0, len(nodes))
+	nodeids := make(map[uuid.UUID][]*Prescription)
+	for i := range nodes {
+		fk := nodes[i].UserID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(user.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "user_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *PrescriptionQuery) loadOffers(ctx context.Context, query *OfferQuery, nodes []*Prescription, init func(*Prescription), assign func(*Prescription, *Offer)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*Prescription)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(offer.FieldPrescriptionID)
+	}
+	query.Where(predicate.Offer(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(prescription.OffersColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.PrescriptionID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "prescription_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
 }
 
 func (_q *PrescriptionQuery) sqlCount(ctx context.Context) (int, error) {
@@ -380,6 +531,9 @@ func (_q *PrescriptionQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != prescription.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withOwner != nil {
+			_spec.Node.AddColumnOnce(prescription.FieldUserID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

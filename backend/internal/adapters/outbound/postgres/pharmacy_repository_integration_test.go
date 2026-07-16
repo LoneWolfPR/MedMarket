@@ -4,16 +4,8 @@ package postgres_test
 
 import (
 	"context"
-	"database/sql"
-	"log/slog"
 	"testing"
-	"time"
 
-	"entgo.io/ent/dialect"
-	entsql "entgo.io/ent/dialect/sql"
-	_ "github.com/jackc/pgx/v5/stdlib"
-
-	"github.com/LoneWolfPR/MedMarket/backend/ent"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/postgres"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
@@ -22,9 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 // Two independently valid pharmacies. Regulatory IDs carry real checksums (NPI
@@ -54,35 +43,10 @@ var fixtureAddress = shared.Address{
 // canonical fixtures above.
 func setupPharmacyRepo(t *testing.T) *postgres.PharmacyRepository {
 	t.Helper()
-	ctx := context.Background()
-
-	container, err := tcpostgres.Run(ctx, "postgres:17-alpine",
-		tcpostgres.WithDatabase("medmarket_test"),
-		tcpostgres.WithUsername("test"),
-		tcpostgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second),
-		),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = testcontainers.TerminateContainer(container) })
-
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	db, err := sql.Open("pgx", connStr)
-	require.NoError(t, err)
-
-	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db)))
-	t.Cleanup(func() { _ = client.Close() })
-
-	require.NoError(t, client.Schema.Create(ctx))
 
 	repo, err := postgres.NewPharmacyRepository(postgres.NewPharmacyRepositoryParams{
-		Client: client,
-		Logger: slog.New(slog.DiscardHandler),
+		Client: newTestClient(t),
+		Logger: discardLogger(),
 	})
 	require.NoError(t, err)
 	return repo

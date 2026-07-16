@@ -67,6 +67,7 @@ func (h *PriceSearchHandler) SearchPrescriptionPrices(
 
 func toQuoteResponse(quote inbound.QuoteView) openapi.QuoteResponse {
 	return openapi.QuoteResponse{
+		OfferId:        quote.OfferID,
 		PharmacyId:     quote.Quote.PharmacyID(),
 		PharmacyItemId: quote.Quote.PharmacyItemID(),
 		PharmacyName:   quote.PharmacyName,

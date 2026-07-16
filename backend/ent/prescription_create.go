@@ -10,7 +10,9 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/offer"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/prescription"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/user"
 	"github.com/google/uuid"
 )
 
@@ -103,6 +105,32 @@ func (_c *PrescriptionCreate) SetNillableID(v *uuid.UUID) *PrescriptionCreate {
 		_c.SetID(*v)
 	}
 	return _c
+}
+
+// SetOwnerID sets the "owner" edge to the User entity by ID.
+func (_c *PrescriptionCreate) SetOwnerID(id uuid.UUID) *PrescriptionCreate {
+	_c.mutation.SetOwnerID(id)
+	return _c
+}
+
+// SetOwner sets the "owner" edge to the User entity.
+func (_c *PrescriptionCreate) SetOwner(v *User) *PrescriptionCreate {
+	return _c.SetOwnerID(v.ID)
+}
+
+// AddOfferIDs adds the "offers" edge to the Offer entity by IDs.
+func (_c *PrescriptionCreate) AddOfferIDs(ids ...uuid.UUID) *PrescriptionCreate {
+	_c.mutation.AddOfferIDs(ids...)
+	return _c
+}
+
+// AddOffers adds the "offers" edges to the Offer entity.
+func (_c *PrescriptionCreate) AddOffers(v ...*Offer) *PrescriptionCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddOfferIDs(ids...)
 }
 
 // Mutation returns the PrescriptionMutation object of the builder.
@@ -207,6 +235,9 @@ func (_c *PrescriptionCreate) check() error {
 			return &ValidationError{Name: "quantity", err: fmt.Errorf(`ent: validator failed for field "Prescription.quantity": %w`, err)}
 		}
 	}
+	if len(_c.mutation.OwnerIDs()) == 0 {
+		return &ValidationError{Name: "owner", err: errors.New(`ent: missing required edge "Prescription.owner"`)}
+	}
 	return nil
 }
 
@@ -242,10 +273,6 @@ func (_c *PrescriptionCreate) createSpec() (*Prescription, *sqlgraph.CreateSpec)
 		_node.ID = id
 		_spec.ID.Value = &id
 	}
-	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(prescription.FieldUserID, field.TypeUUID, value)
-		_node.UserID = value
-	}
 	if value, ok := _c.mutation.DocumentKey(); ok {
 		_spec.SetField(prescription.FieldDocumentKey, field.TypeString, value)
 		_node.DocumentKey = value
@@ -277,6 +304,39 @@ func (_c *PrescriptionCreate) createSpec() (*Prescription, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(prescription.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if nodes := _c.mutation.OwnerIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   prescription.OwnerTable,
+			Columns: []string{prescription.OwnerColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.UserID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.OffersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   prescription.OffersTable,
+			Columns: []string{prescription.OffersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(offer.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }

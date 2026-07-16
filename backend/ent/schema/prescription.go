@@ -5,6 +5,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	"github.com/google/uuid"
@@ -24,8 +25,9 @@ func (Prescription) Fields() []ent.Field {
 			Default(uuid.New).
 			Annotations(entsql.DefaultExpr("gen_random_uuid()")).
 			Immutable(),
-		// Owning user. Plain uuid column (no Ent edge — the codebase models
-		// relations as bare ids so far); indexed below for the per-user list.
+		// Owning user. Bound to the edge below so the column carries a real FK
+		// constraint; the domain still references the user by bare uuid and never
+		// sees the edge. Indexed below for the per-user list.
 		field.UUID("user_id", uuid.UUID{}).
 			Immutable(),
 		// MinIO object key ("<userID>/<uuid>.<ext>"); the blob lives in MinIO,
@@ -65,11 +67,23 @@ func (Prescription) Fields() []ent.Field {
 func (Prescription) Indexes() []ent.Index {
 	return []ent.Index{
 		// Non-unique — a user has many prescriptions; speeds the per-user list.
+		// Also the FK's referencing side, which Postgres does not index for us.
 		index.Fields("user_id"),
 	}
 }
 
 // Edges of the Prescription.
 func (Prescription) Edges() []ent.Edge {
-	return nil
+	return []ent.Edge{
+		// Edges exist purely to generate the FK constraints — the adapter sets the
+		// bare uuid fields and never traverses.
+		edge.From("owner", User.Type).
+			Ref("prescriptions").
+			Field("user_id").
+			Unique().
+			Required().
+			Immutable(),
+		// Inverse side of Offer.prescription.
+		edge.To("offers", Offer.Type),
+	}
 }
