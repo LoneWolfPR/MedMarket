@@ -100,6 +100,22 @@ func seedPrescription(t *testing.T, client *ent.Client, userID uuid.UUID) uuid.U
 	return rx.ID
 }
 
+// seedOffer inserts an offer row and returns its id. orders.offer_id is a FK to
+// offers.id.
+func seedOffer(t *testing.T, client *ent.Client, rxID, pharmID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	o, err := client.Offer.Create().
+		SetPrescriptionID(rxID).
+		SetPharmacyID(pharmID).
+		SetPriceCents(1299).
+		SetPharmacyItemID("RXD-ATO-20").
+		SetExpiresAt(time.Now().Add(15 * time.Minute)).
+		Save(context.Background())
+	require.NoError(t, err)
+	return o.ID
+}
+
 // seedPharmacy inserts a pharmacy row and returns its id. offers.pharmacy_id is
 // a FK to pharmacies.id. The regulatory ids are unique columns, so they are
 // uuid-derived rather than the checksum-valid fixtures used by the pharmacy

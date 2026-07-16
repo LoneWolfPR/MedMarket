@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/offer"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/order"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/prescription"
 	"github.com/google/uuid"
@@ -103,6 +104,21 @@ func (_c *OfferCreate) SetPrescription(v *Prescription) *OfferCreate {
 // SetPharmacy sets the "pharmacy" edge to the Pharmacy entity.
 func (_c *OfferCreate) SetPharmacy(v *Pharmacy) *OfferCreate {
 	return _c.SetPharmacyID(v.ID)
+}
+
+// AddOrderIDs adds the "orders" edge to the Order entity by IDs.
+func (_c *OfferCreate) AddOrderIDs(ids ...uuid.UUID) *OfferCreate {
+	_c.mutation.AddOrderIDs(ids...)
+	return _c
+}
+
+// AddOrders adds the "orders" edges to the Order entity.
+func (_c *OfferCreate) AddOrders(v ...*Order) *OfferCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddOrderIDs(ids...)
 }
 
 // Mutation returns the OfferMutation object of the builder.
@@ -274,6 +290,22 @@ func (_c *OfferCreate) createSpec() (*Offer, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.PharmacyID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.OrdersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   offer.OrdersTable,
+			Columns: []string{offer.OrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(order.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

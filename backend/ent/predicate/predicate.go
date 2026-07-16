@@ -9,6 +9,9 @@ import (
 // Offer is the predicate function for offer builders.
 type Offer func(*sql.Selector)
 
+// Order is the predicate function for order builders.
+type Order func(*sql.Selector)
+
 // Pharmacy is the predicate function for pharmacy builders.
 type Pharmacy func(*sql.Selector)
 

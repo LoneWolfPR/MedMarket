@@ -3,6 +3,7 @@
 package migrate
 
 import (
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
 )
@@ -48,6 +49,51 @@ var (
 				Name:    "offer_pharmacy_id",
 				Unique:  false,
 				Columns: []*schema.Column{OffersColumns[6]},
+			},
+		},
+	}
+	// OrdersColumns holds the columns for the "orders" table.
+	OrdersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID, Default: schema.Expr("gen_random_uuid()")},
+		{Name: "status", Type: field.TypeString},
+		{Name: "pharmacy_order_id", Type: field.TypeString, Nullable: true},
+		{Name: "tracking_id", Type: field.TypeString, Nullable: true},
+		{Name: "quantity", Type: field.TypeInt},
+		{Name: "price_paid_cents", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "offer_id", Type: field.TypeUUID},
+		{Name: "prescription_id", Type: field.TypeUUID},
+	}
+	// OrdersTable holds the schema information for the "orders" table.
+	OrdersTable = &schema.Table{
+		Name:       "orders",
+		Columns:    OrdersColumns,
+		PrimaryKey: []*schema.Column{OrdersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "orders_offers_orders",
+				Columns:    []*schema.Column{OrdersColumns[8]},
+				RefColumns: []*schema.Column{OffersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "orders_prescriptions_orders",
+				Columns:    []*schema.Column{OrdersColumns[9]},
+				RefColumns: []*schema.Column{PrescriptionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "order_prescription_id",
+				Unique:  false,
+				Columns: []*schema.Column{OrdersColumns[9]},
+			},
+			{
+				Name:    "order_offer_id",
+				Unique:  false,
+				Columns: []*schema.Column{OrdersColumns[8]},
 			},
 		},
 	}
@@ -133,6 +179,7 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		OffersTable,
+		OrdersTable,
 		PharmaciesTable,
 		PrescriptionsTable,
 		UsersTable,
@@ -142,5 +189,11 @@ var (
 func init() {
 	OffersTable.ForeignKeys[0].RefTable = PharmaciesTable
 	OffersTable.ForeignKeys[1].RefTable = PrescriptionsTable
+	OrdersTable.ForeignKeys[0].RefTable = OffersTable
+	OrdersTable.ForeignKeys[1].RefTable = PrescriptionsTable
+	OrdersTable.Annotation = &entsql.Annotation{}
+	OrdersTable.Annotation.Checks = map[string]string{
+		"order_status_valid": "status IN ('placed', 'confirmed', 'shipped', 'delivered', 'failed', 'canceled')",
+	}
 	PrescriptionsTable.ForeignKeys[0].RefTable = UsersTable
 }

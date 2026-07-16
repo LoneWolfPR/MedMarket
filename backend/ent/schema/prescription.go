@@ -85,5 +85,7 @@ func (Prescription) Edges() []ent.Edge {
 			Immutable(),
 		// Inverse side of Offer.prescription.
 		edge.To("offers", Offer.Type),
+		// Inverse side of Order.prescription.
+		edge.To("orders", Order.Type),
 	}
 }

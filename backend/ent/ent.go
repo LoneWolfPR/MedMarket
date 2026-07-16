@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/offer"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/order"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/prescription"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/user"
@@ -77,6 +78,7 @@ func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			offer.Table:        offer.ValidColumn,
+			order.Table:        order.ValidColumn,
 			pharmacy.Table:     pharmacy.ValidColumn,
 			prescription.Table: prescription.ValidColumn,
 			user.Table:         user.ValidColumn,

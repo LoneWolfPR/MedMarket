@@ -37,6 +37,8 @@ const (
 	EdgeOwner = "owner"
 	// EdgeOffers holds the string denoting the offers edge name in mutations.
 	EdgeOffers = "offers"
+	// EdgeOrders holds the string denoting the orders edge name in mutations.
+	EdgeOrders = "orders"
 	// Table holds the table name of the prescription in the database.
 	Table = "prescriptions"
 	// OwnerTable is the table that holds the owner relation/edge.
@@ -53,6 +55,13 @@ const (
 	OffersInverseTable = "offers"
 	// OffersColumn is the table column denoting the offers relation/edge.
 	OffersColumn = "prescription_id"
+	// OrdersTable is the table that holds the orders relation/edge.
+	OrdersTable = "orders"
+	// OrdersInverseTable is the table name for the Order entity.
+	// It exists in this package in order to avoid circular dependency with the "order" package.
+	OrdersInverseTable = "orders"
+	// OrdersColumn is the table column denoting the orders relation/edge.
+	OrdersColumn = "prescription_id"
 )
 
 // Columns holds all SQL columns for prescription fields.
@@ -175,6 +184,20 @@ func ByOffers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newOffersStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByOrdersCount orders the results by orders count.
+func ByOrdersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newOrdersStep(), opts...)
+	}
+}
+
+// ByOrders orders the results by orders terms.
+func ByOrders(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newOrdersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newOwnerStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -187,5 +210,12 @@ func newOffersStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(OffersInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, OffersTable, OffersColumn),
+	)
+}
+func newOrdersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(OrdersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, OrdersTable, OrdersColumn),
 	)
 }

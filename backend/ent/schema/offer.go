@@ -95,5 +95,7 @@ func (Offer) Edges() []ent.Edge {
 			Unique().
 			Required().
 			Immutable(),
+		// Inverse side of Order.offer.
+		edge.To("orders", Order.Type),
 	}
 }

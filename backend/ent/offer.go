@@ -46,9 +46,11 @@ type OfferEdges struct {
 	Prescription *Prescription `json:"prescription,omitempty"`
 	// Pharmacy holds the value of the pharmacy edge.
 	Pharmacy *Pharmacy `json:"pharmacy,omitempty"`
+	// Orders holds the value of the orders edge.
+	Orders []*Order `json:"orders,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
 // PrescriptionOrErr returns the Prescription value or an error if the edge
@@ -71,6 +73,15 @@ func (e OfferEdges) PharmacyOrErr() (*Pharmacy, error) {
 		return nil, &NotFoundError{label: pharmacy.Label}
 	}
 	return nil, &NotLoadedError{edge: "pharmacy"}
+}
+
+// OrdersOrErr returns the Orders value or an error if the edge
+// was not loaded in eager-loading.
+func (e OfferEdges) OrdersOrErr() ([]*Order, error) {
+	if e.loadedTypes[2] {
+		return e.Orders, nil
+	}
+	return nil, &NotLoadedError{edge: "orders"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -170,6 +181,11 @@ func (_m *Offer) QueryPrescription() *PrescriptionQuery {
 // QueryPharmacy queries the "pharmacy" edge of the Offer entity.
 func (_m *Offer) QueryPharmacy() *PharmacyQuery {
 	return NewOfferClient(_m.config).QueryPharmacy(_m)
+}
+
+// QueryOrders queries the "orders" edge of the Offer entity.
+func (_m *Offer) QueryOrders() *OrderQuery {
+	return NewOfferClient(_m.config).QueryOrders(_m)
 }
 
 // Update returns a builder for updating this Offer.

@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/offer"
+	"github.com/LoneWolfPR/MedMarket/backend/ent/order"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/predicate"
 	"github.com/LoneWolfPR/MedMarket/backend/ent/prescription"
 	"github.com/google/uuid"
@@ -128,6 +129,21 @@ func (_u *PrescriptionUpdate) AddOffers(v ...*Offer) *PrescriptionUpdate {
 	return _u.AddOfferIDs(ids...)
 }
 
+// AddOrderIDs adds the "orders" edge to the Order entity by IDs.
+func (_u *PrescriptionUpdate) AddOrderIDs(ids ...uuid.UUID) *PrescriptionUpdate {
+	_u.mutation.AddOrderIDs(ids...)
+	return _u
+}
+
+// AddOrders adds the "orders" edges to the Order entity.
+func (_u *PrescriptionUpdate) AddOrders(v ...*Order) *PrescriptionUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddOrderIDs(ids...)
+}
+
 // Mutation returns the PrescriptionMutation object of the builder.
 func (_u *PrescriptionUpdate) Mutation() *PrescriptionMutation {
 	return _u.mutation
@@ -152,6 +168,27 @@ func (_u *PrescriptionUpdate) RemoveOffers(v ...*Offer) *PrescriptionUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveOfferIDs(ids...)
+}
+
+// ClearOrders clears all "orders" edges to the Order entity.
+func (_u *PrescriptionUpdate) ClearOrders() *PrescriptionUpdate {
+	_u.mutation.ClearOrders()
+	return _u
+}
+
+// RemoveOrderIDs removes the "orders" edge to Order entities by IDs.
+func (_u *PrescriptionUpdate) RemoveOrderIDs(ids ...uuid.UUID) *PrescriptionUpdate {
+	_u.mutation.RemoveOrderIDs(ids...)
+	return _u
+}
+
+// RemoveOrders removes "orders" edges to Order entities.
+func (_u *PrescriptionUpdate) RemoveOrders(v ...*Order) *PrescriptionUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveOrderIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -301,6 +338,51 @@ func (_u *PrescriptionUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.OrdersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   prescription.OrdersTable,
+			Columns: []string{prescription.OrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(order.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedOrdersIDs(); len(nodes) > 0 && !_u.mutation.OrdersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   prescription.OrdersTable,
+			Columns: []string{prescription.OrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(order.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OrdersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   prescription.OrdersTable,
+			Columns: []string{prescription.OrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(order.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{prescription.Label}
@@ -419,6 +501,21 @@ func (_u *PrescriptionUpdateOne) AddOffers(v ...*Offer) *PrescriptionUpdateOne {
 	return _u.AddOfferIDs(ids...)
 }
 
+// AddOrderIDs adds the "orders" edge to the Order entity by IDs.
+func (_u *PrescriptionUpdateOne) AddOrderIDs(ids ...uuid.UUID) *PrescriptionUpdateOne {
+	_u.mutation.AddOrderIDs(ids...)
+	return _u
+}
+
+// AddOrders adds the "orders" edges to the Order entity.
+func (_u *PrescriptionUpdateOne) AddOrders(v ...*Order) *PrescriptionUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddOrderIDs(ids...)
+}
+
 // Mutation returns the PrescriptionMutation object of the builder.
 func (_u *PrescriptionUpdateOne) Mutation() *PrescriptionMutation {
 	return _u.mutation
@@ -443,6 +540,27 @@ func (_u *PrescriptionUpdateOne) RemoveOffers(v ...*Offer) *PrescriptionUpdateOn
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveOfferIDs(ids...)
+}
+
+// ClearOrders clears all "orders" edges to the Order entity.
+func (_u *PrescriptionUpdateOne) ClearOrders() *PrescriptionUpdateOne {
+	_u.mutation.ClearOrders()
+	return _u
+}
+
+// RemoveOrderIDs removes the "orders" edge to Order entities by IDs.
+func (_u *PrescriptionUpdateOne) RemoveOrderIDs(ids ...uuid.UUID) *PrescriptionUpdateOne {
+	_u.mutation.RemoveOrderIDs(ids...)
+	return _u
+}
+
+// RemoveOrders removes "orders" edges to Order entities.
+func (_u *PrescriptionUpdateOne) RemoveOrders(v ...*Order) *PrescriptionUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveOrderIDs(ids...)
 }
 
 // Where appends a list predicates to the PrescriptionUpdate builder.
@@ -615,6 +733,51 @@ func (_u *PrescriptionUpdateOne) sqlSave(ctx context.Context) (_node *Prescripti
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(offer.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.OrdersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   prescription.OrdersTable,
+			Columns: []string{prescription.OrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(order.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedOrdersIDs(); len(nodes) > 0 && !_u.mutation.OrdersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   prescription.OrdersTable,
+			Columns: []string{prescription.OrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(order.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OrdersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   prescription.OrdersTable,
+			Columns: []string{prescription.OrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(order.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

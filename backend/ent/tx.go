@@ -14,6 +14,8 @@ type Tx struct {
 	config
 	// Offer is the client for interacting with the Offer builders.
 	Offer *OfferClient
+	// Order is the client for interacting with the Order builders.
+	Order *OrderClient
 	// Pharmacy is the client for interacting with the Pharmacy builders.
 	Pharmacy *PharmacyClient
 	// Prescription is the client for interacting with the Prescription builders.
@@ -152,6 +154,7 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.Offer = NewOfferClient(tx.config)
+	tx.Order = NewOrderClient(tx.config)
 	tx.Pharmacy = NewPharmacyClient(tx.config)
 	tx.Prescription = NewPrescriptionClient(tx.config)
 	tx.User = NewUserClient(tx.config)

@@ -84,7 +84,16 @@ func run() error {
 		Logger: logger,
 	})
 	if err != nil {
-		return fmt.Errorf("error creation offer repo: %w", err)
+		return fmt.Errorf("error creating offer repo: %w", err)
+	}
+
+	// Setup Order Repo
+	orderRepo, err := postgres.NewOrderRepository(postgres.NewOrderRepositoryParams{
+		Client: client,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("error creating order repo: %w", err)
 	}
 
 	// Setup Temporal. The API only starts price-search workflows; the worker
