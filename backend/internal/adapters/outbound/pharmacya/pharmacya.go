@@ -38,20 +38,6 @@ type NewPharmacyAParams struct {
 	BaseURL string
 }
 
-type pharmACriteria struct {
-	MedName     string `json:"drug"`
-	MedStrength string `json:"strength"`
-}
-
-type searchResultItem struct {
-	SKU        string `json:"sku"`
-	PriceCents int64  `json:"priceCents"`
-}
-
-type apiResponse struct {
-	Results []searchResultItem `json:"results"`
-}
-
 // NewPharmacyA constructs a new instance of the PharmacyA adapter
 func NewPharmacyA(p NewPharmacyAParams) (*PharmacyA, error) {
 	if p.Client == nil {
@@ -76,6 +62,21 @@ func NewPharmacyA(p NewPharmacyAParams) (*PharmacyA, error) {
 		baseURL: p.BaseURL,
 		id:      p.ID,
 	}, nil
+}
+
+// Search related structs
+type pharmACriteria struct {
+	MedName     string `json:"drug"`
+	MedStrength string `json:"strength"`
+}
+
+type searchResultItem struct {
+	SKU        string `json:"sku"`
+	PriceCents int64  `json:"priceCents"`
+}
+
+type searchAPIResponse struct {
+	Results []searchResultItem `json:"results"`
 }
 
 // Search queries the api for a list of prices for a specific medication by name and strength
@@ -116,7 +117,7 @@ func (pa *PharmacyA) Search(
 		return nil, fmt.Errorf("pharmacy A search failed: status %d: %s", resp.StatusCode, bodyBytes)
 	}
 
-	var apiResp apiResponse
+	var apiResp searchAPIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
 		return nil, fmt.Errorf("error decoding response: %w", err)
 	}
@@ -147,4 +148,128 @@ func (pa *PharmacyA) Search(
 	}
 
 	return priceQuoteList, nil
+}
+
+// Order related structs
+type orderBody struct {
+	SKU      string       `json:"sku"`
+	Qty      int          `json:"quantity"`
+	Shipping shippingAddr `json:"shipping"`
+}
+
+type shippingAddr struct {
+	Name    string `json:"name"`
+	Street1 string `json:"street1"`
+	Street2 string `json:"street2"`
+	City    string `json:"city"`
+	State   string `json:"state"`
+	Zip     string `json:"zip"`
+}
+
+type orderAPIResponse struct {
+	OrderID    string `json:"orderId"`
+	TrackingID string `json:"trackingId"`
+	Status     string `json:"status"`
+	TotalCents int    `json:"totalCents"`
+}
+
+// PlaceOrder sends an order request to the api
+func (pa *PharmacyA) PlaceOrder(
+	ctx context.Context,
+	i pharmacy.OrderInput,
+) (pharmacy.OrderResult, error) {
+	orderPath := pa.baseURL + "/api/v1/order"
+	addr := i.ShippingAddress()
+	orderInput := orderBody{
+		SKU: i.PharmacyItemID(),
+		Qty: i.Qty(),
+		Shipping: shippingAddr{
+			Name:    i.RecipientName(),
+			Street1: addr.Street1,
+			Street2: addr.Street2,
+			City:    addr.City,
+			State:   addr.State,
+			Zip:     addr.Zip,
+		},
+	}
+
+	jsonData, err := json.Marshal(orderInput)
+	if err != nil {
+		newErr := outbound.NewPlaceOrderError(
+			outbound.KindRejected,
+			fmt.Errorf("error marshaling json data: %w", err),
+		)
+		return pharmacy.OrderResult{}, newErr
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, orderPath, bytes.NewBuffer(jsonData))
+	if err != nil {
+		newErr := outbound.NewPlaceOrderError(
+			outbound.KindRejected,
+			fmt.Errorf("error constructing request: %w", err),
+		)
+		return pharmacy.OrderResult{}, newErr
+	}
+	req.Header.Set("Content-type", "application/json")
+	req.Header.Set("Idempotency-Key", i.IdempotencyKey())
+	req.Header.Set("X-Api-Key", pa.secret)
+
+	resp, err := pa.client.Do(req)
+	if err != nil {
+		return pharmacy.OrderResult{}, fmt.Errorf("error placing order: %w", err)
+	}
+
+	//nolint:errcheck // unnecessary
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		respError := fmt.Errorf(
+			"pharmacy A failed to place order with status %d: %s",
+			resp.StatusCode, bodyBytes)
+		if !isRetryableStatus(resp.StatusCode) {
+			return pharmacy.OrderResult{}, outbound.NewPlaceOrderError(
+				outbound.KindRejected,
+				respError,
+			)
+		}
+		return pharmacy.OrderResult{}, respError
+	}
+
+	var orderResp orderAPIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&orderResp); err != nil {
+		return pharmacy.OrderResult{}, fmt.Errorf("error decoding response: %w", err)
+	}
+
+	newTotal, err := shared.NewMoneyFromCents(int64(orderResp.TotalCents))
+	if err != nil {
+		// Logging but not failing if there's an issue on total since this is not
+		// the price actually used. The price charged came from the offer at purchase
+		// time
+		pa.logger.ErrorContext(
+			ctx,
+			"error with total returned from order",
+			"total", orderResp.TotalCents,
+			"order id", orderResp.OrderID,
+		)
+	}
+	result, err := pharmacy.NewOrderResult(pharmacy.NewOrderResultParams{
+		PharmacyOrderID: orderResp.OrderID,
+		TrackingID:      orderResp.TrackingID,
+		NewTotal:        newTotal,
+		OrderStatus:     orderResp.Status,
+	})
+	if err != nil {
+		return pharmacy.OrderResult{}, fmt.Errorf("error parsing order response: %w", err)
+	}
+	return result, nil
+}
+
+func isRetryableStatus(code int) bool {
+	switch code {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests:
+		return true
+	default:
+		return code >= 500
+	}
 }

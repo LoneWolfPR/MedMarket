@@ -45,13 +45,20 @@ func (f fakePharmacyRepo) List(ctx context.Context) ([]pharmacy.Pharmacy, error)
 }
 
 type fakePharmacyClient struct {
-	searchFn func(ctx context.Context, c pharmacy.SearchCriteria) ([]pharmacy.PriceQuote, error)
+	searchFn     func(ctx context.Context, c pharmacy.SearchCriteria) ([]pharmacy.PriceQuote, error)
+	placeOrderFn func(ctx context.Context, i pharmacy.OrderInput) (pharmacy.OrderResult, error)
 }
 
 func (f fakePharmacyClient) Search(
 	ctx context.Context, c pharmacy.SearchCriteria,
 ) ([]pharmacy.PriceQuote, error) {
 	return f.searchFn(ctx, c)
+}
+
+func (f fakePharmacyClient) PlaceOrder(
+	ctx context.Context, i pharmacy.OrderInput,
+) (pharmacy.OrderResult, error) {
+	return f.placeOrderFn(ctx, i)
 }
 
 // --- fixtures ---------------------------------------------------------------

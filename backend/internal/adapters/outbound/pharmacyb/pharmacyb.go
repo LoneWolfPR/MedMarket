@@ -20,11 +20,11 @@ import (
 
 // PharmacyB is the adapter for making queries against Pharmacy B
 type PharmacyB struct {
-	client  *http.Client
-	logger  *slog.Logger
-	id      uuid.UUID
-	secret  string
-	baseURL string
+	client   *http.Client
+	logger   *slog.Logger
+	id       uuid.UUID
+	secret   string
+	endpoint string
 }
 
 var _ outbound.PharmacyClient = (*PharmacyB)(nil)
@@ -38,30 +38,6 @@ type NewPharmacyBParams struct {
 	BaseURL string
 }
 
-type graphQLRequest struct {
-	Query     string          `json:"query"`
-	Variables searchVariables `json:"variables"`
-}
-
-type searchVariables struct {
-	Name     string `json:"name"`
-	Strength string `json:"strength"`
-}
-
-type graphQLResponse struct {
-	Data   responseData   `json:"data"`
-	Errors []graphQLError `json:"errors"`
-}
-
-type responseData struct {
-	Medications []medicationItem `json:"medications"`
-}
-
-type medicationItem struct {
-	Code      string `json:"code"`
-	UnitPrice money  `json:"unitPrice"`
-}
-
 type money struct {
 	Amount string `json:"amount"`
 }
@@ -69,13 +45,6 @@ type money struct {
 type graphQLError struct {
 	Message string `json:"message"`
 }
-
-const searchQuery = `query Search($name: String!, $strength: String) {
-	medications(name: $name, strength: $strength) {
-		code
-		unitPrice { amount }
-	}
-}`
 
 // NewPharmacyB constructs a new instance of the PharmacyB adapter
 func NewPharmacyB(p NewPharmacyBParams) (*PharmacyB, error) {
@@ -95,20 +64,50 @@ func NewPharmacyB(p NewPharmacyBParams) (*PharmacyB, error) {
 		return nil, errors.New("api base url is missing")
 	}
 	return &PharmacyB{
-		client:  p.Client,
-		logger:  p.Logger,
-		secret:  p.Secret,
-		baseURL: p.BaseURL,
-		id:      p.ID,
+		client:   p.Client,
+		logger:   p.Logger,
+		secret:   p.Secret,
+		endpoint: strings.TrimRight(p.BaseURL, "/") + "/graphql",
+		id:       p.ID,
 	}, nil
 }
+
+type graphQLSearchRequest struct {
+	Query     string          `json:"query"`
+	Variables searchVariables `json:"variables"`
+}
+
+type searchVariables struct {
+	Name     string `json:"name"`
+	Strength string `json:"strength"`
+}
+
+type graphQLSearchResponse struct {
+	Data   searchResponseData `json:"data"`
+	Errors []graphQLError     `json:"errors"`
+}
+
+type searchResponseData struct {
+	Medications []medicationItem `json:"medications"`
+}
+
+type medicationItem struct {
+	Code      string `json:"code"`
+	UnitPrice money  `json:"unitPrice"`
+}
+
+const searchQuery = `query Search($name: String!, $strength: String) {
+	medications(name: $name, strength: $strength) {
+		code
+		unitPrice { amount }
+	}
+}`
 
 // Search queries the api for a list of prices for a specific medication by name and strength
 func (pb *PharmacyB) Search(
 	ctx context.Context,
 	c pharmacy.SearchCriteria,
 ) ([]pharmacy.PriceQuote, error) {
-	searchPath := pb.baseURL + "/graphql"
 	priceQuoteList := []pharmacy.PriceQuote{}
 
 	searchVars := searchVariables{
@@ -116,7 +115,7 @@ func (pb *PharmacyB) Search(
 		Strength: c.MedStrength().String(),
 	}
 
-	gqlQuery := graphQLRequest{
+	gqlQuery := graphQLSearchRequest{
 		Query:     searchQuery,
 		Variables: searchVars,
 	}
@@ -126,7 +125,7 @@ func (pb *PharmacyB) Search(
 		return nil, fmt.Errorf("error marshaling json data: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, searchPath, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, pb.endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("error constructing request: %w", err)
 	}
@@ -146,7 +145,7 @@ func (pb *PharmacyB) Search(
 		return nil, fmt.Errorf("pharmacy B search failed: status %d: %s", resp.StatusCode, bodyBytes)
 	}
 
-	var gqlResp graphQLResponse
+	var gqlResp graphQLSearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&gqlResp); err != nil {
 		return nil, fmt.Errorf("error decoding response: %w", err)
 	}
@@ -189,4 +188,186 @@ func (pb *PharmacyB) Search(
 	}
 
 	return priceQuoteList, nil
+}
+
+type graphQLOrderRequest struct {
+	Mutation  string         `json:"query"`
+	Variables orderVariables `json:"variables"`
+}
+
+type orderVariables struct {
+	Input graphQLOrderInput `json:"input"`
+}
+
+type graphQLOrderInputRecipient struct {
+	Name       string `json:"name"`
+	Line1      string `json:"line1"`
+	City       string `json:"city"`
+	State      string `json:"state"`
+	PostalCode string `json:"postalCode"`
+}
+
+type graphQLOrderInput struct {
+	Code      string                     `json:"code"`
+	Count     int                        `json:"count"`
+	Recipient graphQLOrderInputRecipient `json:"recipient"`
+}
+
+type graphQLOrderResponse struct {
+	Data   orderResponseData `json:"data"`
+	Errors []graphQLError    `json:"errors"`
+}
+
+type orderResponseData struct {
+	PlaceOrder *placeOrderResponse `json:"placeOrder,omitempty"`
+}
+
+type placeOrderResponse struct {
+	Reference  string `json:"reference"`
+	Tracking   string `json:"tracking"`
+	GrandTotal money  `json:"grandTotal"`
+	State      string `json:"state"`
+}
+
+const orderMutation = `mutation PlaceOrder($input: OrderInput!) {
+	placeOrder(input: $input) {
+		reference
+		tracking
+		state
+		grandTotal { amount }
+	}
+}`
+
+// PlaceOrder sends an order request to the api
+func (pb *PharmacyB) PlaceOrder(
+	ctx context.Context,
+	i pharmacy.OrderInput,
+) (pharmacy.OrderResult, error) {
+	addr := i.ShippingAddress()
+	line1Val := addr.Street1
+	if addr.Street2 != "" {
+		line1Val += ", " + addr.Street2
+	}
+	orderVars := orderVariables{
+		Input: graphQLOrderInput{
+			Code:  i.PharmacyItemID(),
+			Count: i.Qty(),
+			Recipient: graphQLOrderInputRecipient{
+				Name:       i.RecipientName(),
+				Line1:      line1Val,
+				City:       addr.City,
+				State:      addr.State,
+				PostalCode: addr.Zip,
+			},
+		},
+	}
+
+	gqlMutation := graphQLOrderRequest{
+		Mutation:  orderMutation,
+		Variables: orderVars,
+	}
+
+	jsonData, err := json.Marshal(gqlMutation)
+	if err != nil {
+		newErr := outbound.NewPlaceOrderError(
+			outbound.KindRejected,
+			fmt.Errorf("error marshaling json data: %w", err),
+		)
+		return pharmacy.OrderResult{}, newErr
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, pb.endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		newErr := outbound.NewPlaceOrderError(
+			outbound.KindRejected,
+			fmt.Errorf("error constructing request: %w", err),
+		)
+		return pharmacy.OrderResult{}, newErr
+	}
+	req.Header.Set("Content-type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+pb.secret)
+
+	resp, err := pb.client.Do(req)
+	if err != nil {
+		respError := outbound.NewPlaceOrderError(
+			outbound.KindOutcomeUnknown,
+			fmt.Errorf("error placing an order: %w", err),
+		)
+		return pharmacy.OrderResult{}, respError
+	}
+
+	//nolint:errcheck // unnecessary
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		errKind := outbound.KindRejected
+		if resp.StatusCode >= 500 {
+			errKind = outbound.KindOutcomeUnknown
+		}
+		respError := outbound.NewPlaceOrderError(
+			errKind,
+			fmt.Errorf(
+				"pharmacy B failed to place order with status %d: %s",
+				resp.StatusCode, bodyBytes),
+		)
+		return pharmacy.OrderResult{}, respError
+	}
+
+	var gqlResp graphQLOrderResponse
+	if err := json.NewDecoder(resp.Body).Decode(&gqlResp); err != nil {
+		respError := outbound.NewPlaceOrderError(
+			outbound.KindOutcomeUnknown,
+			fmt.Errorf("error decoding response: %w", err),
+		)
+		return pharmacy.OrderResult{}, respError
+	}
+
+	if len(gqlResp.Errors) > 0 {
+		messages := []string{}
+		for _, gqlErr := range gqlResp.Errors {
+			messages = append(messages, gqlErr.Message)
+		}
+		messagesStr := strings.Join(messages, "; ")
+		respError := outbound.NewPlaceOrderError(
+			outbound.KindOutcomeUnknown,
+			fmt.Errorf("graphql errors returned: %s", messagesStr),
+		)
+		return pharmacy.OrderResult{}, respError
+	}
+
+	orderData := gqlResp.Data.PlaceOrder
+	if orderData == nil {
+		respError := outbound.NewPlaceOrderError(
+			outbound.KindOutcomeUnknown,
+			fmt.Errorf("missing response data: %v", gqlResp),
+		)
+		return pharmacy.OrderResult{}, respError
+	}
+
+	newTotal, err := shared.NewMoneyFromDollars(orderData.GrandTotal.Amount)
+	if err != nil {
+		respError := outbound.NewPlaceOrderError(
+			outbound.KindOutcomeUnknown,
+			fmt.Errorf("error processing returned amount: %w", err),
+		)
+		return pharmacy.OrderResult{}, respError
+	}
+
+	result, err := pharmacy.NewOrderResult(pharmacy.NewOrderResultParams{
+		PharmacyOrderID: orderData.Reference,
+		TrackingID:      orderData.Tracking,
+		NewTotal:        newTotal,
+		OrderStatus:     orderData.State,
+	})
+
+	if err != nil {
+		respError := outbound.NewPlaceOrderError(
+			outbound.KindOutcomeUnknown,
+			fmt.Errorf("error parsing response: %w", err),
+		)
+		return pharmacy.OrderResult{}, respError
+	}
+
+	return result, nil
 }

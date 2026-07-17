@@ -61,10 +61,25 @@ const missingShippingFields = (shipping) =>
     (f) => typeof shipping?.[f] !== "string" || shipping[f].trim() === "",
   );
 
+// Pharmacy A honors an Idempotency-Key header: a retried order with the same
+// key replays the original response instead of placing a second order. This is
+// what lets the backend safely retry an ambiguous outcome (e.g. a lost
+// response). Pharmacy B deliberately has no equivalent. In-memory is fine for a
+// throwaway mock.
+const idempotencyStore = new Map();
+
 // Order confirms against a SKU and returns a tracking id the backend can
 // later register with the shipping service.
 app.post("/api/v1/order", async (req, res) => {
   await delay(randInt(200, 500));
+
+  // A repeated key replays the stored order deterministically — and skips the
+  // random-failure roll below — so a retry never places a duplicate or fails.
+  const idempotencyKey = req.get("Idempotency-Key");
+  if (idempotencyKey && idempotencyStore.has(idempotencyKey)) {
+    return res.status(201).json(idempotencyStore.get(idempotencyKey));
+  }
+
   if (Math.random() < ERROR_RATE) {
     return res.status(500).json({ error: "internal_error" });
   }
@@ -78,12 +93,18 @@ app.post("/api/v1/order", async (req, res) => {
     return res.status(404).json({ error: "unknown_sku" });
   }
   const unitCents = randInt(item.minCents, item.maxCents);
-  res.status(201).json({
+  const receipt = {
     orderId: `ord_${randomUUID().slice(0, 8)}`,
     trackingId: `RXD${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`,
     status: "CONFIRMED",
     totalCents: unitCents * quantity,
-  });
+  };
+  // Only a successful placement is cached; a 400/404/500 leaves no entry, so a
+  // corrected or retried request is processed fresh.
+  if (idempotencyKey) {
+    idempotencyStore.set(idempotencyKey, receipt);
+  }
+  res.status(201).json(receipt);
 });
 
 app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
