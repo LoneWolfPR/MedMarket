@@ -11,11 +11,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/mailer"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/pharmacya"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/pharmacyb"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/postgres"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/shipping"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/bootstrap"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
+	"github.com/LoneWolfPR/MedMarket/backend/workflows/order"
 	"github.com/LoneWolfPR/MedMarket/backend/workflows/pricesearch"
 
 	temporalclient "go.temporal.io/sdk/client"
@@ -104,10 +107,43 @@ func run() error {
 		bootstrap.PharmacyBCode: pharmBAdapter,
 	}
 
+	orderRepo, err := postgres.NewOrderRepository(postgres.NewOrderRepositoryParams{
+		Client: client,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("error creating order repository: %w", err)
+	}
+
+	shippingClient, err := shipping.NewShippingClient(shipping.NewShippingClientParams{
+		Client:  httpClient,
+		Logger:  logger,
+		BaseURL: cfg.ShippingBaseURL,
+	})
+	if err != nil {
+		return fmt.Errorf("error setting up shipping client: %w", err)
+	}
+
+	mailerAdapter, err := mailer.NewMailer(mailer.NewMailerParams{
+		Logger: logger,
+		Auth:   nil,
+		Addr:   cfg.SMTPHost + ":" + cfg.SMTPPort,
+		From:   cfg.SMTPFrom,
+	})
+	if err != nil {
+		return fmt.Errorf("error setting up mailer: %w", err)
+	}
+
 	// Set up Temporal
-	activities := pricesearch.NewActivities(pricesearch.NewActivitiesParams{
+	priceSearchActivities := pricesearch.NewActivities(pricesearch.NewActivitiesParams{
 		Repo:    pharmacyRepo,
 		Clients: pharmClients,
+	})
+	orderActivities := order.NewActivities(order.NewActivitiesParams{
+		Clients:        pharmClients,
+		OrderRepo:      orderRepo,
+		ShippingClient: shippingClient,
+		EmailSender:    mailerAdapter,
 	})
 	c, err := temporalclient.Dial(temporalclient.Options{
 		HostPort:  cfg.TemporalHostPort,
@@ -118,10 +154,23 @@ func run() error {
 	}
 	defer c.Close()
 
-	w := worker.New(c, pricesearch.TaskQueue, worker.Options{})
-	w.RegisterWorkflowWithOptions(pricesearch.PriceSearchWorkflow, workflow.RegisterOptions{
+	priceSearchWorker := worker.New(c, pricesearch.TaskQueue, worker.Options{})
+	priceSearchWorker.RegisterWorkflowWithOptions(pricesearch.PriceSearchWorkflow, workflow.RegisterOptions{
 		Name: pricesearch.WorkflowName,
 	})
-	w.RegisterActivity(activities)
-	return w.Run(worker.InterruptCh())
+	priceSearchWorker.RegisterActivity(priceSearchActivities)
+
+	orderWorker := worker.New(c, order.TaskQueue, worker.Options{})
+	orderWorker.RegisterWorkflowWithOptions(order.OrderWorkflow, workflow.RegisterOptions{
+		Name: order.WorkflowName,
+	})
+	orderWorker.RegisterActivity(orderActivities)
+
+	err = priceSearchWorker.Start()
+	if err != nil {
+		return fmt.Errorf("error starting price search worker: %w", err)
+	}
+	defer priceSearchWorker.Stop()
+
+	return orderWorker.Run(worker.InterruptCh())
 }

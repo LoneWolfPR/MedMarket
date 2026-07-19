@@ -46,6 +46,18 @@ MedMarket lets a user:
 - **Reverse proxy (Traefik).** Routes `/api` to the backend and `/` to the
   frontend, with service discovery via Docker labels.
 
+### Deliberate simplifications
+
+- **Synchronous tracking id at order placement.** The mock pharmacies return a
+  shipping tracking id in the `PlaceOrder` response, so the order saga can
+  register the shipping webhook immediately. In a real medication-fulfillment
+  API, placement and shipment creation are decoupled: the pharmacy confirms the
+  order synchronously and a tracking id is assigned *later*, delivered by an
+  async callback once the shipment exists. The saga already accommodates that
+  model — because the **order id** (not the tracking id) is the workflow anchor
+  and webhook address, the tracking id would simply arrive as another inbound
+  signal handled in the selector loop, with no change to addressing or state.
+
 ## Tech Stack
 
 | Area                  | Technology                                                        |

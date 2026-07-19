@@ -1,5 +1,6 @@
 # Go
 /backend/server
+/backend/worker
 *.exe
 *.test
 *.out

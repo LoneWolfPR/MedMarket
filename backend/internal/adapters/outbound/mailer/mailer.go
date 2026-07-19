@@ -52,6 +52,9 @@ func NewMailer(p NewMailerParams) (*Mailer, error) {
 	}, nil
 }
 
+//nolint:revive // sentinel error
+var ErrInvalidMessage = errors.New("invalid message")
+
 // Send will take a list of necessary parameters and send an email to the specified
 // recipient
 func (m *Mailer) Send(ctx context.Context, params outbound.EmailSenderParams) error {
@@ -59,7 +62,7 @@ func (m *Mailer) Send(ctx context.Context, params outbound.EmailSenderParams) er
 
 	msg, err := m.buildMessage(params)
 	if err != nil {
-		return fmt.Errorf("error constructing message: %w", err)
+		return fmt.Errorf("error constructing message: %w: %w", ErrInvalidMessage, err)
 	}
 	err = smtp.SendMail(m.addr, m.auth, m.from, to, []byte(msg))
 	if err != nil {

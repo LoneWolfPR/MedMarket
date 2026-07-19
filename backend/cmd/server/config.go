@@ -27,6 +27,7 @@ type config struct {
 	MinioUseSSL         bool
 	TemporalHostPort    string
 	OfferTTL            time.Duration
+	WebhookBaseURL      string
 }
 
 func loadConfig() (config, error) {
@@ -49,6 +50,7 @@ func loadConfig() (config, error) {
 		MinioUseSSL:         r.RequireBool(envkeys.MinioUseSSL),
 		TemporalHostPort:    r.Require(envkeys.TemporalHostPort),
 		OfferTTL:            r.PositiveDurationOr(envkeys.OfferTTL, defaultOfferTTL),
+		WebhookBaseURL:      r.Require(envkeys.WebhookBaseURL),
 	}
 	if err := r.Err(); err != nil {
 		return config{}, err

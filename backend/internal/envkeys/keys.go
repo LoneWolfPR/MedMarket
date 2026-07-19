@@ -23,4 +23,9 @@ const (
 	PharmacyASecret     = "PHARMACY_A_SECRET" //nolint:gosec // G101: env var name, not a credential
 	PharmacyBSecret     = "PHARMACY_B_SECRET" //nolint:gosec // G101: env var name, not a credential
 	OfferTTL            = "OFFER_TTL"
+	ShippingBaseURL     = "SHIPPING_BASE_URL"
+	WebhookBaseURL      = "WEBHOOK_BASE_URL"
+	SMTPHost            = "SMTP_HOST"
+	SMTPPort            = "SMTP_PORT"
+	SMTPFrom            = "SMTP_FROM"
 )

@@ -13,6 +13,7 @@ import (
 
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/httpx"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
 
 	"github.com/google/uuid"
@@ -210,7 +211,7 @@ func (pa *PharmacyA) PlaceOrder(
 		)
 		return pharmacy.OrderResult{}, newErr
 	}
-	req.Header.Set("Content-type", "application/json")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", i.IdempotencyKey())
 	req.Header.Set("X-Api-Key", pa.secret)
 
@@ -227,7 +228,7 @@ func (pa *PharmacyA) PlaceOrder(
 		respError := fmt.Errorf(
 			"pharmacy A failed to place order with status %d: %s",
 			resp.StatusCode, bodyBytes)
-		if !isRetryableStatus(resp.StatusCode) {
+		if !httpx.IsRetryableStatus(resp.StatusCode) {
 			return pharmacy.OrderResult{}, outbound.NewPlaceOrderError(
 				outbound.KindRejected,
 				respError,
@@ -263,13 +264,4 @@ func (pa *PharmacyA) PlaceOrder(
 		return pharmacy.OrderResult{}, fmt.Errorf("error parsing order response: %w", err)
 	}
 	return result, nil
-}
-
-func isRetryableStatus(code int) bool {
-	switch code {
-	case http.StatusRequestTimeout, http.StatusTooManyRequests:
-		return true
-	default:
-		return code >= 500
-	}
 }

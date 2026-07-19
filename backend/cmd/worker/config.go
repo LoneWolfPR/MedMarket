@@ -11,6 +11,10 @@ type config struct {
 	PharmacyBBaseURL string
 	PharmacyBSecret  string
 	TemporalHostPort string
+	ShippingBaseURL  string
+	SMTPHost         string
+	SMTPPort         string
+	SMTPFrom         string
 }
 
 func loadConfig() (config, error) {
@@ -22,6 +26,10 @@ func loadConfig() (config, error) {
 		PharmacyBBaseURL: r.Require(envkeys.PharmacyBBaseURL),
 		PharmacyBSecret:  r.Require(envkeys.PharmacyBSecret),
 		TemporalHostPort: r.Require(envkeys.TemporalHostPort),
+		ShippingBaseURL:  r.Require(envkeys.ShippingBaseURL),
+		SMTPHost:         r.Require(envkeys.SMTPHost),
+		SMTPPort:         r.Require(envkeys.SMTPPort),
+		SMTPFrom:         r.Require(envkeys.SMTPFrom),
 	}
 	if err := r.Err(); err != nil {
 		return config{}, err
