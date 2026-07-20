@@ -53,6 +53,9 @@ func (r *OrderRepository) Create(ctx context.Context, o *order.Order) (*order.Or
 		SetQuantity(o.Qty).
 		Save(ctx)
 	if err != nil {
+		if ent.IsConstraintError(err) {
+			return nil, outbound.ErrOrderExists
+		}
 		return nil, fmt.Errorf("error creating order record: %w", err)
 	}
 	r.logger.DebugContext(

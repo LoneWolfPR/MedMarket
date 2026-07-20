@@ -108,6 +108,17 @@ func (Order) Indexes() []ent.Index {
 		// step 7, and an index without a query is premature.
 		index.Fields("prescription_id"),
 		index.Fields("offer_id"),
+		// One live order per offer: a partial unique index that excludes the
+		// terminal-non-success statuses, so a failed/canceled attempt can be
+		// re-ordered but an active one cannot be duplicated. This is the only
+		// reliable guard against a concurrent double-submit (an app-level
+		// check-then-insert has a TOCTOU race). The predicate is raw SQL and
+		// won't move if the constants change — keep it in sync with
+		// order.StatusFailed and order.StatusCanceled.
+		index.Fields("offer_id").
+			Unique().
+			StorageKey("order_active_offer_uniq").
+			Annotations(entsql.IndexWhere("status NOT IN ('failed', 'canceled')")),
 	}
 }
 

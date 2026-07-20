@@ -20,6 +20,7 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrEmailTaken         = errors.New("email already in use")
+	ErrUserNotFound       = errors.New("user not found")
 )
 
 // RegisterInput includes the raw values for creating a new user

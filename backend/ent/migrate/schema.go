@@ -95,6 +95,14 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{OrdersColumns[8]},
 			},
+			{
+				Name:    "order_active_offer_uniq",
+				Unique:  true,
+				Columns: []*schema.Column{OrdersColumns[8]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "status NOT IN ('failed', 'canceled')",
+				},
+			},
 		},
 	}
 	// PharmaciesColumns holds the columns for the "pharmacies" table.

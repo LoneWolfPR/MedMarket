@@ -115,8 +115,17 @@ func run() error {
 		return fmt.Errorf("failed to set up price searcher: %w", err)
 	}
 
+	orderStarter, err := temporal.NewOrderStarter(temporal.NewOrderStarterParams{
+		Client: temporalClient,
+		Logger: logger,
+		WebhookBaseURL: cfg.WebhookBaseURL,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to setup order starter: %w", err)
+	}
+
 	// Outbound adapters
-	repo, err := postgres.NewUserRepository(postgres.NewUserRepositoryParams{
+	userRepo, err := postgres.NewUserRepository(postgres.NewUserRepositoryParams{
 		Client: client,
 		Logger: logger,
 	})
@@ -143,7 +152,7 @@ func run() error {
 	// Application Services
 	userService, err := app.NewUserService(app.NewUserServiceParams{
 		Logger:         logger,
-		UserRepository: repo,
+		UserRepository: userRepo,
 		PasswordHasher: hasher,
 		TokenIssuer:    tokenIssuer,
 	})
@@ -169,6 +178,16 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to set up price search service: %w", err)
 	}
+
+	orderService, err := app.NewOrderService(app.NewOrderServiceParams{
+		Logger:       logger,
+		OrderRepo:    orderRepo,
+		OfferRepo:    offerRepo,
+		PharmRepo:    pharmacyRepo,
+		RxRepo:       rxRepo,
+		UserRepo:     userRepo,
+		OrderStarter: orderStarter,
+	})
 
 	// Inbound Adapters
 	authHandler, err := httpapi.NewAuthHandler(httpapi.NewAuthHandlerParams{
