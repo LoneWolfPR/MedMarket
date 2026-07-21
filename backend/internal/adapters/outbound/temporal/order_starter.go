@@ -73,6 +73,8 @@ func (s *OrderStarter) StartOrder(ctx context.Context, i order.PlacementRequest)
 		RecipientEmail: i.RecipientEmail(),
 		Qty:            i.Qty(),
 		Address:        shippingAddress,
+		AmountCents:    i.AmountCents(),
+		PaymentMethod:  i.PaymentMethod(),
 		WebhookBaseURL: s.webhookBaseURL,
 	}
 

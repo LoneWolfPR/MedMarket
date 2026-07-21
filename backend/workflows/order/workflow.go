@@ -51,6 +51,8 @@ type Input struct {
 	Qty            int
 	Address        ShippingAddress
 	WebhookBaseURL string
+	AmountCents    int64
+	PaymentMethod  string
 }
 
 // ShippingStatus is a string type specific to the shipping statuses
@@ -95,6 +97,7 @@ func OrderWorkflow(ctx workflow.Context, i Input) error {
 	var a *Activities
 	var status = StatusPending
 	var orderStatus = ""
+	pricePaid := ptr.To(i.AmountCents)
 	ctx = shared.WithDefaultActivityOptions(ctx)
 	logger := workflow.GetLogger(ctx)
 
@@ -106,13 +109,44 @@ func OrderWorkflow(ctx workflow.Context, i Input) error {
 		return fmt.Errorf("error creating query handler: %w", queryHandlerErr)
 	}
 
+	authID := ""
+	paid := *pricePaid > 0
+	// If an amount was paid authorize the payment
+	if paid {
+		// Authorize Payment
+		authInput := AuthorizeActivityInput{
+			OrderID:       i.OrderID,
+			AmountCents:   i.AmountCents,
+			PaymentMethod: i.PaymentMethod,
+		}
+
+		err := workflow.ExecuteActivity(ctx, a.AuthorizePaymentActivity, authInput).Get(ctx, &authID)
+		if err != nil {
+			return handleAuthorizationFailure(ctx, i, err)
+		}
+	}
+
 	done := false
 
 	// Place the order
 	var placeOrderResult *PlaceOrderActivityResult
 	placeOrderErr := workflow.ExecuteActivity(ctx, a.PlaceOrderActivity, i).Get(ctx, &placeOrderResult)
 	if placeOrderErr != nil {
-		return handlePlacementFailure(ctx, i, placeOrderErr)
+		return handlePlacementFailure(ctx, i, authID, placeOrderErr)
+	}
+
+	// Capture Payment if an authorization occurred
+	if paid && authID != "" {
+		captureInput := CaptureActivityInput{
+			AuthID:      authID,
+			AmountCents: i.AmountCents,
+		}
+
+		err := workflow.ExecuteActivity(ctx, a.CapturePaymentActivity, captureInput).Get(ctx, nil)
+		if err != nil {
+			logger.Error("error capturing payment", "order id", i.OrderID, "error", err)
+			pricePaid = nil
+		}
 	}
 
 	// Update the order record
@@ -121,6 +155,7 @@ func OrderWorkflow(ctx workflow.Context, i Input) error {
 		PharmacyOrderID: &placeOrderResult.PharmacyOrderID,
 		TrackingID:      &placeOrderResult.TrackingID,
 		Status:          ptr.To(order.StatusConfirmed),
+		PricePaidCents:  pricePaid,
 	})
 	if updateErr != nil {
 		// log but don't fail. The order is placed, and we have the information needed to keep tracking
@@ -225,11 +260,20 @@ func updateOrder(ctx workflow.Context, i UpdateOrderActivityInput) error {
 }
 
 func handlePlacementFailure(
-	ctx workflow.Context, i Input, err error) error {
+	ctx workflow.Context, i Input, authID string, err error) error {
+	logger := workflow.GetLogger(ctx)
 	var appErr *temporal.ApplicationError
 	if errors.As(err, &appErr) {
 		switch appErr.Type() {
 		case string(outbound.KindRejected):
+			if authID != "" {
+				if voidErr := voidPayment(ctx, authID); voidErr != nil {
+					logger.Error("error voiding payment for failed order",
+						"order id", i.OrderID,
+						"error", voidErr,
+					)
+				}
+			}
 			// definitely not placed. Update status to failed
 			updateErr := updateOrder(ctx, UpdateOrderActivityInput{
 				ID:     i.OrderID,
@@ -246,6 +290,14 @@ func handlePlacementFailure(
 			// outcome is unknown. Log, but don't update status
 			return fmt.Errorf("error placing order. completion unclear: %w", err)
 		default:
+			if authID != "" {
+				if voidErr := voidPayment(ctx, authID); voidErr != nil {
+					logger.Error("error voiding payment for failed order",
+						"order id", i.OrderID,
+						"error", voidErr,
+					)
+				}
+			}
 			// Some other non-retryable error. record as a failure
 			updateErr := updateOrder(ctx, UpdateOrderActivityInput{
 				ID:     i.OrderID,
@@ -261,4 +313,30 @@ func handlePlacementFailure(
 		}
 	}
 	return fmt.Errorf("failed to place order: %w", err)
+}
+
+func handleAuthorizationFailure(
+	ctx workflow.Context,
+	i Input,
+	err error,
+) error {
+	var appErr *temporal.ApplicationError
+	logger := workflow.GetLogger(ctx)
+	if errors.As(err, &appErr) {
+		updateErr := updateOrder(ctx, UpdateOrderActivityInput{
+			ID:     i.OrderID,
+			Status: ptr.To(order.StatusFailed),
+		})
+		logger.Error("payment authorization failed",
+			"type", appErr.Type(),
+			"error", err,
+			"order updated to failed", updateErr == nil,
+		)
+	}
+	return fmt.Errorf("payment authorization failed: %w", err)
+}
+
+func voidPayment(ctx workflow.Context, authID string) error {
+	var a *Activities
+	return workflow.ExecuteActivity(ctx, a.VoidPaymentActivity, authID).Get(ctx, nil)
 }

@@ -103,6 +103,7 @@ services:
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
       - SMTP_FROM=no-reply@medmarket.local
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy

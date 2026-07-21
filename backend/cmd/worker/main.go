@@ -16,11 +16,13 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/pharmacyb"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/postgres"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/shipping"
+	internalstripe "github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/stripe"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/bootstrap"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
 	"github.com/LoneWolfPR/MedMarket/backend/workflows/order"
 	"github.com/LoneWolfPR/MedMarket/backend/workflows/pricesearch"
 
+	"github.com/stripe/stripe-go/v86"
 	temporalclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -115,6 +117,7 @@ func run() error {
 		return fmt.Errorf("error creating order repository: %w", err)
 	}
 
+	// Set up other adapters
 	shippingClient, err := shipping.NewShippingClient(shipping.NewShippingClientParams{
 		Client:  httpClient,
 		Logger:  logger,
@@ -134,6 +137,15 @@ func run() error {
 		return fmt.Errorf("error setting up mailer: %w", err)
 	}
 
+	stripeClient := stripe.NewClient(cfg.StripeSecretKey)
+	paymentGateway, err := internalstripe.NewPaymentGateway(internalstripe.NewPaymentGatewayParams{
+		Client: stripeClient,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("error setting up payment gateway: %w", err)
+	}
+
 	// Set up Temporal
 	priceSearchActivities := pricesearch.NewActivities(pricesearch.NewActivitiesParams{
 		Repo:    pharmacyRepo,
@@ -144,6 +156,7 @@ func run() error {
 		OrderRepo:      orderRepo,
 		ShippingClient: shippingClient,
 		EmailSender:    mailerAdapter,
+		PaymentGateway: paymentGateway,
 	})
 	c, err := temporalclient.Dial(temporalclient.Options{
 		HostPort:  cfg.TemporalHostPort,

@@ -24,6 +24,7 @@ type Activities struct {
 	orderRepo      outbound.OrderRepository
 	shippingClient outbound.ShippingClient
 	emailSender    outbound.EmailSender
+	paymentGateway outbound.PaymentGateway
 }
 
 // NewActivitiesParams holds the necessary params to construct an instance
@@ -32,6 +33,7 @@ type NewActivitiesParams struct {
 	OrderRepo      outbound.OrderRepository
 	ShippingClient outbound.ShippingClient
 	EmailSender    outbound.EmailSender
+	PaymentGateway outbound.PaymentGateway
 }
 
 // NewActivities constructs a new instance
@@ -41,6 +43,7 @@ func NewActivities(p NewActivitiesParams) *Activities {
 		orderRepo:      p.OrderRepo,
 		shippingClient: p.ShippingClient,
 		emailSender:    p.EmailSender,
+		paymentGateway: p.PaymentGateway,
 	}
 }
 
@@ -259,6 +262,96 @@ func (a *Activities) SendEmailUpdate(ctx context.Context, i EmailUpdateInput) er
 			)
 		}
 		return fmt.Errorf("error sending email notification: %w", err)
+	}
+	return nil
+}
+
+// AuthorizeActivityInput contains the parameters necessary for
+// payment authorization
+type AuthorizeActivityInput struct {
+	OrderID       uuid.UUID
+	AmountCents   int64
+	PaymentMethod string
+}
+
+// InvalidAuthInputErr is an error type
+const InvalidAuthInputErr = "ErrInvalidAuthorizationInput"
+
+// AuthorizePaymentActivity calls the authorize method on the payment gateway
+// to authorize a transaction and returns the authorization id
+func (a *Activities) AuthorizePaymentActivity(ctx context.Context, i AuthorizeActivityInput) (string, error) {
+	authAmount, err := shared.NewMoneyFromCents(i.AmountCents)
+	if err != nil {
+		return "", temporal.NewNonRetryableApplicationError(
+			"invalid amount",
+			InvalidAuthInputErr,
+			err,
+		)
+	}
+
+	authInput := outbound.AuthorizeInput{
+		OrderID:       i.OrderID,
+		Amount:        authAmount,
+		PaymentMethod: i.PaymentMethod,
+	}
+
+	authResult, err := a.paymentGateway.Authorize(ctx, authInput)
+	if err != nil {
+		var payErr *outbound.PaymentError
+		if errors.As(err, &payErr) {
+			return "", temporal.NewNonRetryableApplicationError(
+				"payment authorization failed",
+				string(payErr.Kind),
+				err,
+			)
+		}
+		return "", fmt.Errorf("error authorizing payment: %w", err)
+	}
+
+	return authResult.AuthorizationID, nil
+}
+
+// CaptureActivityInput contains the parameters necessary to capture
+// an authorized payment
+type CaptureActivityInput struct {
+	AuthID      string
+	AmountCents int64
+}
+
+// CapturePaymentActivity calls the capture method on the payment gateway
+// to capture the payment of an authorized transaction
+func (a *Activities) CapturePaymentActivity(ctx context.Context, i CaptureActivityInput) (string, error) {
+	const invalidCaptureInputErr = "ErrInvalidCaptureInput"
+	captureAmount, err := shared.NewMoneyFromCents(i.AmountCents)
+	if err != nil {
+		return "", temporal.NewNonRetryableApplicationError(
+			"invalid amount",
+			invalidCaptureInputErr,
+			err,
+		)
+	}
+
+	captureResult, err := a.paymentGateway.Capture(ctx, i.AuthID, captureAmount)
+	if err != nil {
+		var payErr *outbound.PaymentError
+		if errors.As(err, &payErr) {
+			return "", temporal.NewNonRetryableApplicationError(
+				"payment capture failed",
+				string(payErr.Kind),
+				err,
+			)
+		}
+		return "", fmt.Errorf("error capturing payment: %w", err)
+	}
+
+	return captureResult.AuthorizationID, nil
+}
+
+// VoidPaymentActivity calls the void method on the payment gateway to
+// cancel an authorized transaction
+func (a *Activities) VoidPaymentActivity(ctx context.Context, authID string) error {
+	if err := a.paymentGateway.Void(ctx, authID); err != nil {
+		return fmt.Errorf("error voiding transaction: %w", err)
 	}
 	return nil
 }

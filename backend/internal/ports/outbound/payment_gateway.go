@@ -2,11 +2,41 @@ package outbound
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 
 	"github.com/google/uuid"
 )
+
+// PaymentErrorKind represents the possible error types when running a payment
+type PaymentErrorKind string
+
+//nolint:revive // these are obvious
+const (
+	PaymentKindDeclined   PaymentErrorKind = "declined"
+	PaymentKindUnexpected PaymentErrorKind = "unexpected"
+)
+
+// PaymentError holds information on errors occurring when trying to
+// process a payment
+type PaymentError struct {
+	Kind  PaymentErrorKind
+	cause error
+}
+
+// NewPaymentError constructs a new instance of a payment error
+func NewPaymentError(kind PaymentErrorKind, cause error) *PaymentError {
+	return &PaymentError{
+		Kind:  kind,
+		cause: cause,
+	}
+}
+
+func (e *PaymentError) Unwrap() error { return e.cause }
+func (e *PaymentError) Error() string {
+	return fmt.Sprintf("%s: %v", e.Kind, e.cause)
+}
 
 // AuthorizeInput holds the properties necessary to authorize a transaction
 type AuthorizeInput struct {

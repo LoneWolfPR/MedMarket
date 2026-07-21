@@ -28,4 +28,5 @@ const (
 	SMTPHost            = "SMTP_HOST"
 	SMTPPort            = "SMTP_PORT"
 	SMTPFrom            = "SMTP_FROM"
+	StripeSecretKey     = "STRIPE_SECRET_KEY" //nolint:gosec // G101: env var name, not a credential
 )

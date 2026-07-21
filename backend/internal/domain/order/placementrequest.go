@@ -19,6 +19,8 @@ type PlacementRequest struct {
 	recipientEmail string
 	qty            int
 	address        shared.Address
+	amountCents    int64
+	paymentMethod  string
 }
 
 // NewPlacementRequestParams holds the parameters necessary for constructing an instance
@@ -31,6 +33,8 @@ type NewPlacementRequestParams struct {
 	RecipientEmail string
 	Qty            int
 	Address        shared.Address
+	AmountCents    int64
+	PaymentMethod  string
 }
 
 // NewPlacementRequest constructs an instance of the type
@@ -59,6 +63,12 @@ func NewPlacementRequest(p NewPlacementRequestParams) (PlacementRequest, error) 
 	if !p.Address.IsValid() {
 		return PlacementRequest{}, errors.New("invalid address")
 	}
+	if p.AmountCents < 0 {
+		return PlacementRequest{}, errors.New("invalid amount")
+	}
+	if p.PaymentMethod == "" {
+		return PlacementRequest{}, errors.New("payment method is missing")
+	}
 	return PlacementRequest{
 		orderID:        p.OrderID,
 		pharmacyCode:   p.PharmacyCode,
@@ -68,6 +78,8 @@ func NewPlacementRequest(p NewPlacementRequestParams) (PlacementRequest, error) 
 		recipientEmail: p.RecipientEmail,
 		qty:            p.Qty,
 		address:        p.Address,
+		amountCents:    p.AmountCents,
+		paymentMethod:  p.PaymentMethod,
 	}, nil
 }
 
@@ -109,4 +121,14 @@ func (r PlacementRequest) Qty() int {
 // Address is a getter
 func (r PlacementRequest) Address() shared.Address {
 	return r.address
+}
+
+// AmountCents is a getter
+func (r PlacementRequest) AmountCents() int64 {
+	return r.amountCents
+}
+
+// PaymentMethod is a getter
+func (r PlacementRequest) PaymentMethod() string {
+	return r.paymentMethod
 }
