@@ -10,8 +10,6 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/order"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/inbound"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
-
-	"github.com/google/uuid"
 )
 
 // OrderService is used to place orders
@@ -74,9 +72,9 @@ func NewOrderService(p NewOrderServiceParams) (*OrderService, error) {
 
 // PlaceOrder takes an incoming request from the external handler and calls out to the starter
 // to initiate an order workflow
-func (s *OrderService) PlaceOrder(ctx context.Context, userID, offerID uuid.UUID) (inbound.OrderView, error) {
+func (s *OrderService) PlaceOrder(ctx context.Context, i inbound.OrderInput) (inbound.OrderView, error) {
 	// Fetch offer
-	offerRecord, err := s.offerRepo.GetByID(ctx, offerID)
+	offerRecord, err := s.offerRepo.GetByID(ctx, i.OfferID)
 	if err != nil {
 		if errors.Is(err, outbound.ErrOfferNotFound) {
 			return inbound.OrderView{}, fmt.Errorf("%w: %w", inbound.ErrOfferNotFound, err)
@@ -89,7 +87,7 @@ func (s *OrderService) PlaceOrder(ctx context.Context, userID, offerID uuid.UUID
 		return inbound.OrderView{}, fmt.Errorf("error fetching prescription record: %w", err)
 	}
 	// Fetch user
-	userRecord, err := s.userRepo.GetByID(ctx, userID)
+	userRecord, err := s.userRepo.GetByID(ctx, i.UserID)
 	if err != nil {
 		if errors.Is(err, outbound.ErrUserNotFound) {
 			return inbound.OrderView{}, fmt.Errorf("%w: %w", inbound.ErrInvalidCredentials, err)
@@ -97,7 +95,7 @@ func (s *OrderService) PlaceOrder(ctx context.Context, userID, offerID uuid.UUID
 		return inbound.OrderView{}, fmt.Errorf("error fetching user record: %w", err)
 	}
 	// validate offer owned by user
-	if rxRecord.UserID != userID {
+	if rxRecord.UserID != i.UserID {
 		return inbound.OrderView{}, inbound.ErrOfferNotFound
 	}
 	// validate offer is not expired
@@ -112,7 +110,7 @@ func (s *OrderService) PlaceOrder(ctx context.Context, userID, offerID uuid.UUID
 	// Create Order Record
 	newOrder, err := order.NewOrder(order.NewOrderParams{
 		PrescriptionID: offerRecord.PrescriptionID,
-		OfferID:        offerID,
+		OfferID:        i.OfferID,
 		Qty:            rxRecord.Qty,
 	})
 	if err != nil {
@@ -126,6 +124,8 @@ func (s *OrderService) PlaceOrder(ctx context.Context, userID, offerID uuid.UUID
 		}
 		return inbound.OrderView{}, fmt.Errorf("error saving order record: %w", err)
 	}
+
+	totalCents := offerRecord.Quote.Price().Cents() * int64(rxRecord.Qty)
 	orderRequestInput, err := order.NewPlacementRequest(order.NewPlacementRequestParams{
 		OrderID:        orderRecord.ID,
 		PharmacyCode:   pharmRecord.Code,
@@ -135,6 +135,8 @@ func (s *OrderService) PlaceOrder(ctx context.Context, userID, offerID uuid.UUID
 		RecipientEmail: userRecord.Email.String(),
 		Qty:            orderRecord.Qty,
 		Address:        userRecord.Address,
+		PaymentMethod:  i.PaymentMethod,
+		AmountCents:    totalCents,
 	})
 	if err != nil {
 		return inbound.OrderView{}, fmt.Errorf("error creating request: %w", err)
@@ -142,13 +144,12 @@ func (s *OrderService) PlaceOrder(ctx context.Context, userID, offerID uuid.UUID
 
 	if err = s.orderStarter.StartOrder(ctx, orderRequestInput); err != nil {
 		orderRecord.Status = order.StatusFailed
-		_, err := s.orderRepo.Update(ctx, orderRecord)
-		if err != nil {
+		if _, updateErr := s.orderRepo.Update(ctx, orderRecord); updateErr != nil {
 			s.logger.ErrorContext(
 				ctx,
 				"error updating order record after failed start",
 				"order id", orderRecord.ID,
-				"error", err)
+				"error", updateErr)
 		}
 		return inbound.OrderView{}, fmt.Errorf("error starting order: %w", err)
 	}

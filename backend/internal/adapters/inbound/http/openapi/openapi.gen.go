@@ -49,6 +49,25 @@ type LoginRequest struct {
 	Password string              `json:"password"`
 }
 
+// OrderRequest defines model for OrderRequest.
+type OrderRequest struct {
+	// OfferId The offer to order, from a prior price search
+	OfferId openapi_types.UUID `json:"offerId"`
+
+	// PaymentMethod A payment method token (e.g. a Stripe pm_... token)
+	PaymentMethod string `json:"paymentMethod"`
+}
+
+// OrderResponse defines model for OrderResponse.
+type OrderResponse struct {
+	ItemName string             `json:"itemName"`
+	OrderId  openapi_types.UUID `json:"orderId"`
+	Quantity int                `json:"quantity"`
+
+	// Status The order's current lifecycle status
+	Status string `json:"status"`
+}
+
 // PrescriptionResponse defines model for PrescriptionResponse.
 type PrescriptionResponse struct {
 	// DocumentUrl Short-lived presigned URL to the uploaded document
@@ -106,6 +125,12 @@ type UserResponse struct {
 // BadRequest defines model for BadRequest.
 type BadRequest = Error
 
+// Conflict defines model for Conflict.
+type Conflict = Error
+
+// Gone defines model for Gone.
+type Gone = Error
+
 // NotFound defines model for NotFound.
 type NotFound = Error
 
@@ -132,6 +157,9 @@ type LoginUserJSONRequestBody = LoginRequest
 // RegisterUserJSONRequestBody defines body for RegisterUser for application/json ContentType.
 type RegisterUserJSONRequestBody = RegisterRequest
 
+// CreateOrderJSONRequestBody defines body for CreateOrder for application/json ContentType.
+type CreateOrderJSONRequestBody = OrderRequest
+
 // UploadPrescriptionMultipartRequestBody defines body for UploadPrescription for multipart/form-data ContentType.
 type UploadPrescriptionMultipartRequestBody UploadPrescriptionMultipartBody
 
@@ -146,6 +174,9 @@ type ServerInterface interface {
 	// Register a new user account
 	// (POST /api/auth/register)
 	RegisterUser(w http.ResponseWriter, r *http.Request)
+	// Place an order for a persisted offer
+	// (POST /api/orders)
+	CreateOrder(w http.ResponseWriter, r *http.Request)
 	// List the authenticated user's prescriptions
 	// (GET /api/prescriptions)
 	ListPrescriptions(w http.ResponseWriter, r *http.Request)
@@ -205,6 +236,26 @@ func (siw *ServerInterfaceWrapper) RegisterUser(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RegisterUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOrder operation middleware
+func (siw *ServerInterfaceWrapper) CreateOrder(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOrder(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -409,6 +460,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/auth/login", wrapper.LoginUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/auth/profile", wrapper.GetProfile)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/auth/register", wrapper.RegisterUser)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/orders", wrapper.CreateOrder)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/prescriptions", wrapper.ListPrescriptions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prescriptions/upload", wrapper.UploadPrescription)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prescriptions/{id}/search", wrapper.SearchPrescriptionPrices)
@@ -417,6 +469,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 }
 
 type BadRequestJSONResponse Error
+
+type ConflictJSONResponse Error
+
+type GoneJSONResponse Error
 
 type NotFoundJSONResponse Error
 
@@ -539,6 +595,98 @@ func (response RegisterUser409JSONResponse) VisitRegisterUserResponse(w http.Res
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOrderRequestObject struct {
+	Body *CreateOrderJSONRequestBody
+}
+
+type CreateOrderResponseObject interface {
+	VisitCreateOrderResponse(w http.ResponseWriter) error
+}
+
+type CreateOrder201JSONResponse OrderResponse
+
+func (response CreateOrder201JSONResponse) VisitCreateOrderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOrder400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateOrder400JSONResponse) VisitCreateOrderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOrder401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateOrder401JSONResponse) VisitCreateOrderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOrder404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateOrder404JSONResponse) VisitCreateOrderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOrder409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateOrder409JSONResponse) VisitCreateOrderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOrder410JSONResponse struct{ GoneJSONResponse }
+
+func (response CreateOrder410JSONResponse) VisitCreateOrderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(410)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -689,6 +837,9 @@ type StrictServerInterface interface {
 	// Register a new user account
 	// (POST /api/auth/register)
 	RegisterUser(ctx context.Context, request RegisterUserRequestObject) (RegisterUserResponseObject, error)
+	// Place an order for a persisted offer
+	// (POST /api/orders)
+	CreateOrder(ctx context.Context, request CreateOrderRequestObject) (CreateOrderResponseObject, error)
 	// List the authenticated user's prescriptions
 	// (GET /api/prescriptions)
 	ListPrescriptions(ctx context.Context, request ListPrescriptionsRequestObject) (ListPrescriptionsResponseObject, error)
@@ -815,6 +966,37 @@ func (sh *strictHandler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// CreateOrder operation middleware
+func (sh *strictHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
+	var request CreateOrderRequestObject
+
+	var body CreateOrderJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateOrder(ctx, request.(CreateOrderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateOrder")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateOrderResponseObject); ok {
+		if err := validResponse.VisitCreateOrderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListPrescriptions operation middleware
 func (sh *strictHandler) ListPrescriptions(w http.ResponseWriter, r *http.Request) {
 	var request ListPrescriptionsRequestObject
@@ -901,32 +1083,36 @@ func (sh *strictHandler) SearchPrescriptionPrices(w http.ResponseWriter, r *http
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"UWO1uFz8EQAA//8=",
+	"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",
+	"e94+Iw0i0HVrTzUVaqHmanO5+V8AAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

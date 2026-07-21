@@ -102,8 +102,8 @@ func OrderWorkflow(ctx workflow.Context, i Input) error {
 	logger := workflow.GetLogger(ctx)
 
 	// Create a query handler for current shipping status
-	queryHandlerErr := workflow.SetQueryHandler(ctx, ShippingStatusQuery, func() ShippingStatus {
-		return status
+	queryHandlerErr := workflow.SetQueryHandler(ctx, ShippingStatusQuery, func() (ShippingStatus, error) {
+		return status, nil
 	})
 	if queryHandlerErr != nil {
 		return fmt.Errorf("error creating query handler: %w", queryHandlerErr)

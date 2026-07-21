@@ -162,6 +162,37 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/orders:
+    post:
+      operationId: createOrder
+      summary: Place an order for a persisted offer
+      tags: [orders]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+      responses:
+        '201':
+          description: Order placed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -184,6 +215,18 @@ components:
             $ref: '#/components/schemas/Error'
     NotFound:
       description: The requested resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: The request conflicts with the current state of the resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Gone:
+      description: The requested resource is no longer available
       content:
         application/json:
           schema:
@@ -312,6 +355,33 @@ components:
           type: integer
           format: int64
           description: Unit price multiplied by the prescription quantity, in cents
+
+    OrderRequest:
+      type: object
+      required: [offerId, paymentMethod]
+      properties:
+        offerId:
+          type: string
+          format: uuid
+          description: The offer to order, from a prior price search
+        paymentMethod:
+          type: string
+          description: A payment method token (e.g. a Stripe pm_... token)
+
+    OrderResponse:
+      type: object
+      required: [orderId, itemName, quantity, status]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        itemName:
+          type: string
+        quantity:
+          type: integer
+        status:
+          type: string
+          description: The order's current lifecycle status
 
     Error:
       type: object

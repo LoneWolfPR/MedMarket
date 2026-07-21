@@ -12,6 +12,7 @@ type server struct {
 	*AuthHandler
 	*PrescriptionHandler
 	*PriceSearchHandler
+	*OrderHandler
 }
 
 var _ openapi.StrictServerInterface = (*server)(nil)
@@ -23,6 +24,7 @@ type NewAPIParams struct {
 	Search       *PriceSearchHandler
 	Logger       *slog.Logger
 	TokenIssuer  outbound.TokenIssuer
+	Order        *OrderHandler
 }
 
 // NewAPI assembles the handlers, JWT middleware, and error-rendering policy, then
@@ -37,12 +39,14 @@ func NewAPI(p NewAPIParams, mux openapi.ServeMux) http.Handler {
 		AuthHandler:         p.Auth,
 		PrescriptionHandler: p.Prescription,
 		PriceSearchHandler:  p.Search,
+		OrderHandler:        p.Order,
 	}
 	protected := map[string]struct{}{
 		"GetProfile":               {},
 		"UploadPrescription":       {},
 		"ListPrescriptions":        {},
 		"SearchPrescriptionPrices": {},
+		"CreateOrder":              {},
 	}
 	authMW := newAuthMiddleware(p.TokenIssuer, protected)
 

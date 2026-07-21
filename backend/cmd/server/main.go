@@ -116,8 +116,8 @@ func run() error {
 	}
 
 	orderStarter, err := temporal.NewOrderStarter(temporal.NewOrderStarterParams{
-		Client: temporalClient,
-		Logger: logger,
+		Client:         temporalClient,
+		Logger:         logger,
 		WebhookBaseURL: cfg.WebhookBaseURL,
 	})
 	if err != nil {
@@ -188,6 +188,9 @@ func run() error {
 		UserRepo:     userRepo,
 		OrderStarter: orderStarter,
 	})
+	if err != nil {
+		return fmt.Errorf("failed to set up order service: %w", err)
+	}
 
 	// Inbound Adapters
 	authHandler, err := httpapi.NewAuthHandler(httpapi.NewAuthHandlerParams{
@@ -211,6 +214,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to setup price search handler: %w", err)
 	}
+	orderHandler, err := httpapi.NewOrderHandler(httpapi.NewOrderHandlerParams{
+		Logger: logger,
+		Svc:    orderService,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to setup order handler: %w", err)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", healthHandler)
@@ -220,6 +230,7 @@ func run() error {
 		Search:       priceSearchHandler,
 		Logger:       logger,
 		TokenIssuer:  tokenIssuer,
+		Order:        orderHandler,
 	}, mux)
 
 	// Explicit timeouts guard against slow-client attacks (e.g. Slowloris);

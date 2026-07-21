@@ -22,7 +22,14 @@ var (
 	ErrOrderAlreadyPlaced = errors.New("order already placed")
 )
 
+// OrderInput holds the input params needed run the place order adapter
+type OrderInput struct {
+	UserID        uuid.UUID
+	OfferID       uuid.UUID
+	PaymentMethod string
+}
+
 // OrderService defines the methods the service needs to implement
 type OrderService interface {
-	PlaceOrder(ctx context.Context, userID, offerID uuid.UUID) (OrderView, error)
+	PlaceOrder(ctx context.Context, i OrderInput) (OrderView, error)
 }
