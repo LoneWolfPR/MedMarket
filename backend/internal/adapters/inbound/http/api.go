@@ -50,6 +50,7 @@ func NewAPI(p NewAPIParams, mux openapi.ServeMux) http.Handler {
 		"ListPrescriptions":        {},
 		"SearchPrescriptionPrices": {},
 		"CreateOrder":              {},
+		"GetOrderStatus":           {},
 	}
 	authMW := newAuthMiddleware(p.TokenIssuer, protected)
 

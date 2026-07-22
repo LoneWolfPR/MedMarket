@@ -193,6 +193,33 @@ paths:
         '410':
           $ref: '#/components/responses/Gone'
 
+  /api/orders/{id}/status:
+    get:
+      operationId: getOrderStatus
+      summary: Get an order's lifecycle status and live shipping detail
+      tags: [orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The order to look up
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The order's status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /webhooks/shipping/{orderID}:
     post:
       operationId: shippingWebhook
@@ -413,6 +440,24 @@ components:
         status:
           type: string
           description: The order's current lifecycle status
+
+    OrderStatusResponse:
+      type: object
+      required: [orderId, status]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          description: >-
+            The coarse order lifecycle status (placed, confirmed, shipped, delivered, canceled, failed)
+        shippingStatus:
+          type: string
+          description: >-
+            The live fine-grained shipping status from the order's workflow (picked_up,
+            in_transit, out_for_delivery, delivered). Absent once the workflow has
+            completed or aged out — the order status carries the state then.
 
     ShippingWebhookRequest:
       type: object

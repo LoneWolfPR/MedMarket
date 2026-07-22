@@ -132,6 +132,14 @@ func run() error {
 		return fmt.Errorf("failed to setup shipping signaler: %w", err)
 	}
 
+	orderStatusQuerier, err := temporal.NewOrderStatusQuerier(temporal.NewOrderStatusQuerierParams{
+		Client: temporalClient,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set up order status querier: %w", err)
+	}
+
 	// Outbound adapters
 	userRepo, err := postgres.NewUserRepository(postgres.NewUserRepositoryParams{
 		Client: client,
@@ -195,6 +203,7 @@ func run() error {
 		RxRepo:       rxRepo,
 		UserRepo:     userRepo,
 		OrderStarter: orderStarter,
+		Querier:      orderStatusQuerier,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to set up order service: %w", err)

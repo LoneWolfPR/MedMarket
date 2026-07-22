@@ -22,13 +22,20 @@ const orderPath = "/api/orders"
 // stubOrderService satisfies inbound.OrderService; each test wires only the
 // behavior it drives through the HTTP stack.
 type stubOrderService struct {
-	placeOrderFn func(context.Context, inbound.OrderInput) (inbound.OrderView, error)
+	placeOrderFn     func(context.Context, inbound.OrderInput) (inbound.OrderView, error)
+	getOrderStatusFn func(context.Context, uuid.UUID, uuid.UUID) (inbound.OrderStatusView, error)
 }
 
 func (s stubOrderService) PlaceOrder(
 	ctx context.Context, i inbound.OrderInput,
 ) (inbound.OrderView, error) {
 	return s.placeOrderFn(ctx, i)
+}
+
+func (s stubOrderService) GetOrderStatus(
+	ctx context.Context, userID, orderID uuid.UUID,
+) (inbound.OrderStatusView, error) {
+	return s.getOrderStatusFn(ctx, userID, orderID)
 }
 
 // newOrderStack assembles the real HTTP stack with a configurable order service,
@@ -165,6 +172,117 @@ func TestCreateOrderRoute_MalformedBodyYields400(t *testing.T) {
 	handler := newOrderStack(t, svc, tokenIssuer(uuid.New()))
 
 	rec := do(t, handler, http.MethodPost, orderPath, []byte(`{"offerId":"not-a-uuid","paymentMethod":"pm"}`),
+		http.Header{"Authorization": {"Bearer any-token"}})
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.NotEmpty(t, decodeMessage(t, rec))
+}
+
+func statusPath(orderID uuid.UUID) string {
+	return "/api/orders/" + orderID.String() + "/status"
+}
+
+func TestGetOrderStatusRoute_RequiresAuth(t *testing.T) {
+	svc := stubOrderService{
+		getOrderStatusFn: func(context.Context, uuid.UUID, uuid.UUID) (inbound.OrderStatusView, error) {
+			t.Fatal("service must not be reached without auth")
+			return inbound.OrderStatusView{}, nil
+		},
+	}
+	handler := newOrderStack(t, svc, stubIssuer{})
+
+	rec := do(t, handler, http.MethodGet, statusPath(uuid.New()), nil, nil)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestGetOrderStatusRoute_SuccessWithLiveShipping(t *testing.T) {
+	userID := uuid.New()
+	orderID := uuid.New()
+
+	var gotUserID, gotOrderID uuid.UUID
+	svc := stubOrderService{
+		getOrderStatusFn: func(_ context.Context, uid, oid uuid.UUID) (inbound.OrderStatusView, error) {
+			gotUserID, gotOrderID = uid, oid
+			return inbound.OrderStatusView{OrderID: oid, Status: "shipped", ShippingStatus: "in_transit"}, nil
+		},
+	}
+	handler := newOrderStack(t, svc, tokenIssuer(userID))
+
+	rec := do(t, handler, http.MethodGet, statusPath(orderID), nil,
+		http.Header{"Authorization": {"Bearer any-token"}})
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, userID, gotUserID)
+	assert.Equal(t, orderID, gotOrderID, "the {id} path parameter should be bound and forwarded")
+
+	var resp openapi.OrderStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, orderID, resp.OrderId)
+	assert.Equal(t, "shipped", resp.Status)
+	require.NotNil(t, resp.ShippingStatus)
+	assert.Equal(t, "in_transit", *resp.ShippingStatus)
+}
+
+func TestGetOrderStatusRoute_OmitsShippingStatusWhenAbsent(t *testing.T) {
+	// A closed/aged-out workflow yields no live detail; the field must be omitted,
+	// not serialized as an empty string.
+	svc := stubOrderService{
+		getOrderStatusFn: func(context.Context, uuid.UUID, uuid.UUID) (inbound.OrderStatusView, error) {
+			return inbound.OrderStatusView{OrderID: uuid.New(), Status: "delivered", ShippingStatus: ""}, nil
+		},
+	}
+	handler := newOrderStack(t, svc, tokenIssuer(uuid.New()))
+
+	rec := do(t, handler, http.MethodGet, statusPath(uuid.New()), nil,
+		http.Header{"Authorization": {"Bearer any-token"}})
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp openapi.OrderStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Nil(t, resp.ShippingStatus, "shippingStatus must be omitted when there is no live detail")
+	assert.NotContains(t, rec.Body.String(), "shippingStatus")
+}
+
+func TestGetOrderStatusRoute_ErrorsMapToStatus(t *testing.T) {
+	tests := map[string]struct {
+		svcErr   error
+		wantCode int
+	}{
+		"order not found -> 404": {svcErr: inbound.ErrOrderNotFound, wantCode: http.StatusNotFound},
+		"unexpected -> 500":      {svcErr: errBoom, wantCode: http.StatusInternalServerError},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			svc := stubOrderService{
+				getOrderStatusFn: func(context.Context, uuid.UUID, uuid.UUID) (inbound.OrderStatusView, error) {
+					return inbound.OrderStatusView{}, tc.svcErr
+				},
+			}
+			handler := newOrderStack(t, svc, tokenIssuer(uuid.New()))
+
+			rec := do(t, handler, http.MethodGet, statusPath(uuid.New()), nil,
+				http.Header{"Authorization": {"Bearer any-token"}})
+
+			require.Equal(t, tc.wantCode, rec.Code)
+			if tc.wantCode == http.StatusInternalServerError {
+				assert.NotContains(t, rec.Body.String(), "boom", "internal error text must not leak")
+			}
+		})
+	}
+}
+
+func TestGetOrderStatusRoute_MalformedIDYields400(t *testing.T) {
+	svc := stubOrderService{
+		getOrderStatusFn: func(context.Context, uuid.UUID, uuid.UUID) (inbound.OrderStatusView, error) {
+			t.Fatal("service must not be called when the order id is malformed")
+			return inbound.OrderStatusView{}, nil
+		},
+	}
+	handler := newOrderStack(t, svc, tokenIssuer(uuid.New()))
+
+	rec := do(t, handler, http.MethodGet, "/api/orders/not-a-uuid/status", nil,
 		http.Header{"Authorization": {"Bearer any-token"}})
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)

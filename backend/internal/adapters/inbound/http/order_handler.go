@@ -7,6 +7,7 @@ import (
 
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http/openapi"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/inbound"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/ptr"
 )
 
 // OrderHandler is the adapter for handling incoming orders
@@ -84,4 +85,39 @@ func (h *OrderHandler) CreateOrder(
 		Status:   orderView.Status,
 	}
 	return openapi.CreateOrder201JSONResponse(resp), nil
+}
+
+// GetOrderStatus takes an order id and fetches the current status
+func (h *OrderHandler) GetOrderStatus(
+	ctx context.Context,
+	req openapi.GetOrderStatusRequestObject,
+) (openapi.GetOrderStatusResponseObject, error) {
+	userID, ok := getUserIDKeyValue(ctx)
+	if !ok {
+		return openapi.GetOrderStatus401JSONResponse{
+			UnauthorizedJSONResponse: unauthorizedBody(),
+		}, nil
+	}
+
+	orderStatusView, err := h.svc.GetOrderStatus(ctx, userID, req.Id)
+	if err != nil {
+		if errors.Is(err, inbound.ErrOrderNotFound) {
+			return openapi.GetOrderStatus404JSONResponse{
+				NotFoundJSONResponse: openapi.NotFoundJSONResponse{
+					Message: inbound.ErrOrderNotFound.Error(),
+				},
+			}, nil
+		}
+		return nil, err
+	}
+
+	resp := openapi.OrderStatusResponse{
+		OrderId: req.Id,
+		Status:  orderStatusView.Status,
+	}
+	if orderStatusView.ShippingStatus != "" {
+		resp.ShippingStatus = ptr.To(orderStatusView.ShippingStatus)
+	}
+
+	return openapi.GetOrderStatus200JSONResponse(resp), nil
 }

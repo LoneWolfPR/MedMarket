@@ -91,6 +91,16 @@ func happyPharm(p pharmacy.Pharmacy) fakePharmacyRepo {
 	}
 }
 
+type fakeOrderStatusQuerier struct {
+	queryFn func(ctx context.Context, orderID uuid.UUID) (string, error)
+}
+
+func (f fakeOrderStatusQuerier) QueryShippingStatus(ctx context.Context, orderID uuid.UUID) (string, error) {
+	return f.queryFn(ctx, orderID)
+}
+
+var _ outbound.OrderStatusQuerier = fakeOrderStatusQuerier{}
+
 func newOrderSvc(
 	t *testing.T,
 	offer fakeOfferRepo,
@@ -99,6 +109,7 @@ func newOrderSvc(
 	pharm fakePharmacyRepo,
 	ord fakeOrderRepo,
 	starter fakeOrderStarter,
+	querier fakeOrderStatusQuerier,
 ) *app.OrderService {
 	t.Helper()
 	svc, err := app.NewOrderService(app.NewOrderServiceParams{
@@ -109,6 +120,7 @@ func newOrderSvc(
 		RxRepo:       rx,
 		UserRepo:     usr,
 		OrderStarter: starter,
+		Querier:      querier,
 	})
 	require.NoError(t, err)
 	return svc
@@ -127,6 +139,7 @@ type orderKit struct {
 	pharm   fakePharmacyRepo
 	ord     fakeOrderRepo
 	starter fakeOrderStarter
+	querier fakeOrderStatusQuerier
 	gotReq  *order.PlacementRequest
 	updated *order.Order
 }
@@ -177,7 +190,7 @@ func newOrderKit(t *testing.T) *orderKit {
 
 func (k *orderKit) svc(t *testing.T) *app.OrderService {
 	t.Helper()
-	return newOrderSvc(t, k.offer, k.rx, k.usr, k.pharm, k.ord, k.starter)
+	return newOrderSvc(t, k.offer, k.rx, k.usr, k.pharm, k.ord, k.starter, k.querier)
 }
 
 // --- NewOrderService --------------------------------------------------------
@@ -192,6 +205,7 @@ func TestNewOrderService_Validation(t *testing.T) {
 		RxRepo:       fakePrescriptionRepo{},
 		UserRepo:     fakeUserRepo{},
 		OrderStarter: fakeOrderStarter{},
+		Querier:      fakeOrderStatusQuerier{},
 	}
 
 	_, err := app.NewOrderService(base)
@@ -205,6 +219,7 @@ func TestNewOrderService_Validation(t *testing.T) {
 		"missing rx repo":       func(p *app.NewOrderServiceParams) { p.RxRepo = nil },
 		"missing user repo":     func(p *app.NewOrderServiceParams) { p.UserRepo = nil },
 		"missing order starter": func(p *app.NewOrderServiceParams) { p.OrderStarter = nil },
+		"missing querier":       func(p *app.NewOrderServiceParams) { p.Querier = nil },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -353,4 +368,159 @@ func TestOrderService_PlaceOrder_StartFailureMarksOrderFailed(t *testing.T) {
 	require.ErrorIs(t, err, errBoom)
 	require.NotNil(t, k.updated, "the order should have been updated to failed")
 	assert.Equal(t, order.StatusFailed, k.updated.Status)
+}
+
+// --- GetOrderStatus ---------------------------------------------------------
+
+func happyOrderByID(o *order.Order) fakeOrderRepo {
+	return fakeOrderRepo{
+		getByIDFn: func(context.Context, uuid.UUID) (*order.Order, error) { return o, nil },
+	}
+}
+
+func happyQuerier(status string) fakeOrderStatusQuerier {
+	return fakeOrderStatusQuerier{
+		queryFn: func(context.Context, uuid.UUID) (string, error) { return status, nil },
+	}
+}
+
+// statusKit wires an all-succeeding GetOrderStatus setup against consistent
+// fixtures; a test swaps a single fake to drive one branch. User/pharmacy/starter
+// are unused by GetOrderStatus, so they stay zero-value fakes.
+type statusKit struct {
+	userID  uuid.UUID
+	orderID uuid.UUID
+	ord     fakeOrderRepo
+	offer   fakeOfferRepo
+	rx      fakePrescriptionRepo
+	querier fakeOrderStatusQuerier
+}
+
+func newStatusKit(t *testing.T) *statusKit {
+	t.Helper()
+
+	userID := uuid.New()
+	orderRec, err := order.NewOrder(order.NewOrderParams{
+		PrescriptionID: uuid.New(),
+		OfferID:        uuid.New(),
+		Qty:            30,
+	})
+	require.NoError(t, err)
+	orderRec.ID = uuid.New()
+	orderRec.Status = order.StatusShipped
+
+	rx := buildRx(t, userID)
+	quote := buildQuote(t, uuid.New(), "sku-1", 1299)
+	offer := buildOffer(t, rx.ID, quote, time.Now().Add(time.Hour))
+
+	return &statusKit{
+		userID:  userID,
+		orderID: orderRec.ID,
+		ord:     happyOrderByID(orderRec),
+		offer:   happyOffer(offer),
+		rx:      happyRx(rx),
+		querier: happyQuerier("in_transit"),
+	}
+}
+
+func (k *statusKit) svc(t *testing.T) *app.OrderService {
+	t.Helper()
+	return newOrderSvc(t, k.offer, k.rx, fakeUserRepo{}, fakePharmacyRepo{}, k.ord, fakeOrderStarter{}, k.querier)
+}
+
+func TestOrderService_GetOrderStatus_HappyPath(t *testing.T) {
+	k := newStatusKit(t)
+
+	view, err := k.svc(t).GetOrderStatus(context.Background(), k.userID, k.orderID)
+	require.NoError(t, err)
+
+	assert.Equal(t, k.orderID, view.OrderID)
+	assert.Equal(t, order.StatusShipped, view.Status)
+	assert.Equal(t, "in_transit", view.ShippingStatus)
+}
+
+func TestOrderService_GetOrderStatus_OrderNotFound(t *testing.T) {
+	k := newStatusKit(t)
+	k.ord = fakeOrderRepo{
+		getByIDFn: func(context.Context, uuid.UUID) (*order.Order, error) {
+			return nil, outbound.ErrOrderNotFound
+		},
+	}
+
+	_, err := k.svc(t).GetOrderStatus(context.Background(), k.userID, k.orderID)
+	require.ErrorIs(t, err, inbound.ErrOrderNotFound)
+}
+
+func TestOrderService_GetOrderStatus_OrderFetchErrorIsGeneric(t *testing.T) {
+	k := newStatusKit(t)
+	k.ord = fakeOrderRepo{
+		getByIDFn: func(context.Context, uuid.UUID) (*order.Order, error) { return nil, errBoom },
+	}
+
+	_, err := k.svc(t).GetOrderStatus(context.Background(), k.userID, k.orderID)
+	require.ErrorIs(t, err, errBoom)
+	assert.NotErrorIs(t, err, inbound.ErrOrderNotFound)
+}
+
+func TestOrderService_GetOrderStatus_OfferNotFoundHidesOrder(t *testing.T) {
+	k := newStatusKit(t)
+	k.offer = fakeOfferRepo{
+		getByIDFn: func(context.Context, uuid.UUID) (*pharmacy.Offer, error) {
+			return nil, outbound.ErrOfferNotFound
+		},
+	}
+
+	_, err := k.svc(t).GetOrderStatus(context.Background(), k.userID, k.orderID)
+	require.ErrorIs(t, err, inbound.ErrOrderNotFound)
+}
+
+func TestOrderService_GetOrderStatus_PrescriptionNotFoundHidesOrder(t *testing.T) {
+	k := newStatusKit(t)
+	k.rx = fakePrescriptionRepo{
+		getByIDFn: func(context.Context, uuid.UUID) (*prescription.Prescription, error) {
+			return nil, outbound.ErrPrescriptionNotFound
+		},
+	}
+
+	_, err := k.svc(t).GetOrderStatus(context.Background(), k.userID, k.orderID)
+	require.ErrorIs(t, err, inbound.ErrOrderNotFound)
+}
+
+func TestOrderService_GetOrderStatus_OwnershipMismatchHidesOrder(t *testing.T) {
+	// An order whose prescription belongs to someone else collapses to not-found.
+	k := newStatusKit(t)
+	k.rx = happyRx(buildRx(t, uuid.New())) // owned by a different user
+
+	_, err := k.svc(t).GetOrderStatus(context.Background(), k.userID, k.orderID)
+	require.ErrorIs(t, err, inbound.ErrOrderNotFound)
+}
+
+func TestOrderService_GetOrderStatus_ClosedWorkflowFallsBackToOrderStatus(t *testing.T) {
+	// A gone workflow (aged out / completed) yields no live detail: the coarse order
+	// status is still returned, ShippingStatus empty, and it is not an error.
+	k := newStatusKit(t)
+	k.querier = fakeOrderStatusQuerier{
+		queryFn: func(context.Context, uuid.UUID) (string, error) {
+			return "", outbound.ErrOrderWorkflowNotFound
+		},
+	}
+
+	view, err := k.svc(t).GetOrderStatus(context.Background(), k.userID, k.orderID)
+	require.NoError(t, err)
+	assert.Equal(t, order.StatusShipped, view.Status)
+	assert.Empty(t, view.ShippingStatus)
+}
+
+func TestOrderService_GetOrderStatus_QueryErrorDegradesGracefully(t *testing.T) {
+	// An unexpected query failure must not fail the endpoint; the order status still
+	// answers, with no live shipping detail.
+	k := newStatusKit(t)
+	k.querier = fakeOrderStatusQuerier{
+		queryFn: func(context.Context, uuid.UUID) (string, error) { return "", errBoom },
+	}
+
+	view, err := k.svc(t).GetOrderStatus(context.Background(), k.userID, k.orderID)
+	require.NoError(t, err)
+	assert.Equal(t, order.StatusShipped, view.Status)
+	assert.Empty(t, view.ShippingStatus)
 }

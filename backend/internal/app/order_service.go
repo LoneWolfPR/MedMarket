@@ -10,6 +10,8 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/order"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/inbound"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
+
+	"github.com/google/uuid"
 )
 
 // OrderService is used to place orders
@@ -21,6 +23,7 @@ type OrderService struct {
 	rxRepo       outbound.PrescriptionRepository
 	userRepo     outbound.UserRepository
 	orderStarter outbound.OrderStarter
+	querier      outbound.OrderStatusQuerier
 }
 
 var _ inbound.OrderService = (*OrderService)(nil)
@@ -34,6 +37,7 @@ type NewOrderServiceParams struct {
 	RxRepo       outbound.PrescriptionRepository
 	UserRepo     outbound.UserRepository
 	OrderStarter outbound.OrderStarter
+	Querier      outbound.OrderStatusQuerier
 }
 
 // NewOrderService constructs the service
@@ -59,6 +63,9 @@ func NewOrderService(p NewOrderServiceParams) (*OrderService, error) {
 	if p.OrderStarter == nil {
 		return nil, errors.New("order starter is missing")
 	}
+	if p.Querier == nil {
+		return nil, errors.New("order status querier is missing")
+	}
 	return &OrderService{
 		logger:       p.Logger,
 		orderRepo:    p.OrderRepo,
@@ -67,6 +74,7 @@ func NewOrderService(p NewOrderServiceParams) (*OrderService, error) {
 		rxRepo:       p.RxRepo,
 		userRepo:     p.UserRepo,
 		orderStarter: p.OrderStarter,
+		querier:      p.Querier,
 	}, nil
 }
 
@@ -160,4 +168,49 @@ func (s *OrderService) PlaceOrder(ctx context.Context, i inbound.OrderInput) (in
 		Status:   orderRecord.Status,
 		Qty:      orderRecord.Qty,
 	}, nil
+}
+
+// GetOrderStatus fetches the order status from the order record and the shipping status
+// if there is an active order workflow
+func (s *OrderService) GetOrderStatus(
+	ctx context.Context,
+	userID, orderID uuid.UUID,
+) (inbound.OrderStatusView, error) {
+	orderRecord, err := s.orderRepo.GetByID(ctx, orderID)
+	if err != nil {
+		if errors.Is(err, outbound.ErrOrderNotFound) {
+			return inbound.OrderStatusView{}, inbound.ErrOrderNotFound
+		}
+		return inbound.OrderStatusView{}, fmt.Errorf("error fetching order status: %w", err)
+	}
+	offer, err := s.offerRepo.GetByID(ctx, orderRecord.OfferID)
+	if err != nil {
+		if errors.Is(err, outbound.ErrOfferNotFound) {
+			return inbound.OrderStatusView{}, inbound.ErrOrderNotFound
+		}
+		return inbound.OrderStatusView{}, fmt.Errorf("error fetching offer from order: %w", err)
+	}
+	rx, err := s.rxRepo.GetByID(ctx, offer.PrescriptionID)
+	if err != nil {
+		if errors.Is(err, outbound.ErrPrescriptionNotFound) {
+			return inbound.OrderStatusView{}, inbound.ErrOrderNotFound
+		}
+		return inbound.OrderStatusView{}, fmt.Errorf("error fetching prescription: %w", err)
+	}
+	if rx.UserID != userID {
+		return inbound.OrderStatusView{}, inbound.ErrOrderNotFound
+	}
+
+	shippingStatus, err := s.querier.QueryShippingStatus(ctx, orderID)
+	if err != nil {
+		if !errors.Is(err, outbound.ErrOrderWorkflowNotFound) {
+			s.logger.ErrorContext(ctx, "error querying shipping status", "error", err)
+		}
+	}
+	return inbound.OrderStatusView{
+		OrderID:        orderID,
+		Status:         orderRecord.Status,
+		ShippingStatus: shippingStatus,
+	}, nil
+
 }

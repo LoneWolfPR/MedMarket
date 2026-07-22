@@ -69,6 +69,17 @@ type OrderResponse struct {
 	Status string `json:"status"`
 }
 
+// OrderStatusResponse defines model for OrderStatusResponse.
+type OrderStatusResponse struct {
+	OrderId openapi_types.UUID `json:"orderId"`
+
+	// ShippingStatus The live fine-grained shipping status from the order's workflow (picked_up, in_transit, out_for_delivery, delivered). Absent once the workflow has completed or aged out — the order status carries the state then.
+	ShippingStatus *string `json:"shippingStatus,omitempty"`
+
+	// Status The coarse order lifecycle status (placed, confirmed, shipped, delivered, canceled, failed)
+	Status string `json:"status"`
+}
+
 // PrescriptionResponse defines model for PrescriptionResponse.
 type PrescriptionResponse struct {
 	// DocumentUrl Short-lived presigned URL to the uploaded document
@@ -190,6 +201,9 @@ type ServerInterface interface {
 	// Place an order for a persisted offer
 	// (POST /api/orders)
 	CreateOrder(w http.ResponseWriter, r *http.Request)
+	// Get an order's lifecycle status and live shipping detail
+	// (GET /api/orders/{id}/status)
+	GetOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// List the authenticated user's prescriptions
 	// (GET /api/prescriptions)
 	ListPrescriptions(w http.ResponseWriter, r *http.Request)
@@ -272,6 +286,38 @@ func (siw *ServerInterfaceWrapper) CreateOrder(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateOrder(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrderStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetOrderStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrderStatus(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -503,6 +549,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/auth/profile", wrapper.GetProfile)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/auth/register", wrapper.RegisterUser)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/orders", wrapper.CreateOrder)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/orders/{id}/status", wrapper.GetOrderStatus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/prescriptions", wrapper.ListPrescriptions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prescriptions/upload", wrapper.UploadPrescription)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prescriptions/{id}/search", wrapper.SearchPrescriptionPrices)
@@ -734,6 +781,56 @@ func (response CreateOrder410JSONResponse) VisitCreateOrderResponse(w http.Respo
 	return err
 }
 
+type GetOrderStatusRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetOrderStatusResponseObject interface {
+	VisitGetOrderStatusResponse(w http.ResponseWriter) error
+}
+
+type GetOrderStatus200JSONResponse OrderStatusResponse
+
+func (response GetOrderStatus200JSONResponse) VisitGetOrderStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrderStatus401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetOrderStatus401JSONResponse) VisitGetOrderStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrderStatus404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetOrderStatus404JSONResponse) VisitGetOrderStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListPrescriptionsRequestObject struct {
 }
 
@@ -928,6 +1025,9 @@ type StrictServerInterface interface {
 	// Place an order for a persisted offer
 	// (POST /api/orders)
 	CreateOrder(ctx context.Context, request CreateOrderRequestObject) (CreateOrderResponseObject, error)
+	// Get an order's lifecycle status and live shipping detail
+	// (GET /api/orders/{id}/status)
+	GetOrderStatus(ctx context.Context, request GetOrderStatusRequestObject) (GetOrderStatusResponseObject, error)
 	// List the authenticated user's prescriptions
 	// (GET /api/prescriptions)
 	ListPrescriptions(ctx context.Context, request ListPrescriptionsRequestObject) (ListPrescriptionsResponseObject, error)
@@ -1088,6 +1188,32 @@ func (sh *strictHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetOrderStatus operation middleware
+func (sh *strictHandler) GetOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetOrderStatusRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOrderStatus(ctx, request.(GetOrderStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOrderStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOrderStatusResponseObject); ok {
+		if err := validResponse.VisitGetOrderStatusResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListPrescriptions operation middleware
 func (sh *strictHandler) ListPrescriptions(w http.ResponseWriter, r *http.Request) {
 	var request ListPrescriptionsRequestObject
@@ -1207,41 +1333,44 @@ func (sh *strictHandler) ShippingWebhook(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"1Frvbts4En+Vge6AJoBip93igMt9ynbbonftXrZpdj8URcFIY4sbiVSHo7jewsA9xD3hPclhSMmSYsmx",
+	"mya7+6WVRWo4/M1vOH+YL1Fii9IaNOyiky8RoSutceh/fK/St/ipQsfyK7GG0fhHVZa5ThRra6a/Omvk",
+	"nUsyLJQ8/ZVwFp1Ef5m2oqdh1E2fE1mKVqtVHKXoEtKlCIlOolfmWuU6BaoXXMXRM2tmuU4eYPF3GTYL",
+	"Q1Kv6mChOQPOEJKKCA2DY8UIduZfEjpbUYKi6Utr8EG1xHS9PmgHxkJuzRwJ1LXSubrMvVo/Wn5hK5P+",
+	"bqqlFkU5Bvysg00vjKo4s6R/wwdQ6412Tps5WAJd8yshTNGwVrmL5INahixxmqaEzj+WZEsk1sEPEs1L",
+	"+Z+XJUYnkWPSZi678YSQkRtoLOxRjsxINWXU5SXhtfZ7i+KoUJ9fo5lzFp08iaNCm86vgTUIkR+PrC9j",
+	"TwbHftPlwPtVHImdNAn879fC47DHZkfh6w9rbezlr5h4+wWoNxAq0Dk1x9sXbCYOyX5t59p0Dpz+Elgo",
+	"ncvDzFKhODqp3wxAVirnFpbS3uz1y/gWFRux6w+GdP03pUijutrZDOlVOsCMTM6PGRKwBSsyYpiRLUBB",
+	"SdqS/JsgOFSUZFHcal9VOh3e6rJAw2+QMzuw3inUE6DwM4DtFRo4wMl8AgrOmXSJUBYfJ5NJGDu8FZ9m",
+	"czcX3wJTiCmbOGnG4kdV4CCBPTyv+kYcg+FTpQz3vVQbxjlS46aVG7GGrPLIrc/4XM8wWSY5Qv3VrXDU",
+	"asbtbjr6rBcfRefcj49jtA8MLtNlqc38fMuGc32NMNMGj+aktMEUmq/qHQdCcgebhaWrWW4XcFDq5ArT",
+	"j1UZgzYfmZRxmmOwFX+cWfqYokinZQz1E6aHEzi9dIKsNQl6sWtxmXIgx3mOEjUsgZrL/xXD//7z31aD",
+	"Rq9EEWl0fiCcq5yhmQwCsQWAxCpyjeib5oaDMlcJprHPAzQV8ugBkof1rmJIlEkwl6eZ0jmmh3sQZQsl",
+	"zqjVd5wTqU0q8bwLyjf3eJ5Z4iNRNIWS0Om5GPni7Ws5cwS7qsytSjGFRswQgno3xhWYjjpwmS2dTrQy",
+	"ozNuc1vycfHCaB4NfzLhZ5VXO8Qev4O+Uu0Gbkq7sXzPpbvwDxnxp8oybvHoHaJDph18EjGwUA5KJKd9",
+	"aqXcBPyx4YBwhoTiVJrhcgk6BWfrfNWxLZAkNUwyReJV8j4EF84Ue6lefgoZEsZAijO/sDKwyBTjtf+F",
+	"UGaKCpUsgfDIf+FAce09rAucwM8+saoM6zw4rd8Cfi41oZvsFMXqNXY85tbTGYsxHJs5jxzYhQHtk76Z",
+	"RoKZDRuT4xoOzv91Ib6eYgyTyeRw23KjNGbLKn/WlFB9XYQ9NfBFlbMuc42pmCsYpJ0LDcHkaIXES+tA",
+	"pw3/7WmrXcdNKqP5TBYY0cCPCYVAZu4nfTz0txa7AdCGeTY07AE25D9vcS5sH8+vVJupb6sLmoR+Fe+T",
+	"Pc40OR61da62DO6ZeApUdeW4/eRqVeooEO+WqZ7X0f0XvMysvRrPWROfAqWn3NM+VYxH4uf7htmS7LUO",
+	"+UMTWn3W+RUpxNDSTCq50mYe/H87fJ25a53j7oaHcHsn2fD4Ie6T5R2W9tOG5F+4bZnx78jwHSP/dkfY",
+	"jddecqPmIMk3kRPaYVKR5uW5oBDwukRFSKeVVNHNrxfNFv75y7uorvRFUhht95Qxl6F7oM3MDh2gnVM6",
+	"HOViCkXayYtcsYAFp2evfC6qORepbzB9o+gKWQaiOLqWGO7lHU8eT459hVOiUaWOTqLvJseT77wnc+b3",
+	"M1WlnqqKs2kuVbEniA1uKzTxnQShfiiahUtRgBYdf2/T5TfrrfSK8lXfgEwV+hednuGT4+NvtnbfBQf6",
+	"O2JvieuJYkwF0afHj8eErrWc9npQnk9VUShaRifR889Jpswcu20inzAoCKwJRbKYWc2dUFhERR9ESmuy",
+	"kuxM557/cxyw2Uvks3rKPaLXO2BGenaVQ4JG3a/Hr/bH6OR93xPff1h96ML7EtnnPaprN6/EI7dWYzu2",
+	"VOcG4x7RZA/36BQ3E5Sd/OLxg1lWxoXBrVcc327VTrPff/L3+2/PPpeTH1ROqFKpLwKoG07ZoA0KDC4C",
+	"Z1WS2CpUrsNk8QWKG2fJMw+PL6XuiSS9FuEDM6TfdxuA3k+A0Ov4aorsfVbIR09v/2h9b9EScfsH65si",
+	"+eDxDjvxFzZ7HV1nAhUoU1e+ISa0dbmvjDpsrOl3k4/TLzpdTdu0eSw8dDqDPisgVSB7Pr8fbWICW8it",
+	"vYKqjCSV8aUHZ1EcGZ+mhWyrz8G4w6dbMj6B495i1VAndCRkNU3JGsQHIuK+Ua4hyiO32WJUJg1d2HXj",
+	"NUWuU/Ux+nQ7BePMea0dn/Vm3tFmmrG4tQgZ7Fmu1gRSRGq5LQHxsb+r9P0nIgLUtkykD2Fjlf77EeNM",
+	"Q3t1PPJc+PEuaFsDUOgaKeKpOOhRqlj1bTTcGh4ryjulTDMVDnSh5uJZcPbDi8NuX+hSGwHsT9747fS5",
+	"797+HahIHzS0D3vbpnf1qta7JoP36ozBIfwV6BA75bjU7KBAVp79+zpkiLnhSnXUK8/9eBc037HcKfz2",
+	"9GYbegR/yBi803nev77Y4SD/KVwLrO8N6wZwuKtTDI5tcuVHCkxr5WJIMlQlOgbf+PkjBvLAie52Zs0V",
+	"vQNrbjD2kets7xaSLkIz1k2bFGD6JVwP/rDqUrQP8zOV5+3dwTp5aBqtcGBsCGrnZ6eHwkPC0hKD8nOL",
+	"5i+YKn8pZOb4D3B6blTuepe9VBkjYptb2gkExNsoqQ3kNlE5pHjtb2oVEKq8VWRhqzzthdbwt1QK6stI",
+	"30SZRPFNH+y3qnfPfBeZdZ17ZZd5BQgTlDQr3Hmm4Q9bBnyyRv7ujvnta8iR5v1OIefJwGWUR0GKZyzv",
+	"Eg729rhOLR9sojb+6iBYqD1ENvjdcanGfcSbvEPTdUORivLoJJpGqw+r/wcAAP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
