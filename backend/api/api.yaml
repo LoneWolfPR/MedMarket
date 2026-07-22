@@ -193,6 +193,37 @@ paths:
         '410':
           $ref: '#/components/responses/Gone'
 
+  /webhooks/shipping/{orderID}:
+    post:
+      operationId: shippingWebhook
+      summary: Receive a shipping status update from the shipping provider
+      description: >-
+        Called by the shipping provider (not the SPA) to report a shipment status
+        change; signals the order's running workflow. Unauthenticated in local dev —
+        a real provider would authenticate with a signed token.
+      tags: [webhooks]
+      parameters:
+        - name: orderID
+          in: path
+          required: true
+          description: The order whose workflow should receive the update
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingWebhookRequest'
+      responses:
+        '202':
+          description: Update accepted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -382,6 +413,20 @@ components:
         status:
           type: string
           description: The order's current lifecycle status
+
+    ShippingWebhookRequest:
+      type: object
+      required: [trackingId, status, occurredAt]
+      properties:
+        trackingId:
+          type: string
+        status:
+          type: string
+          description: >-
+            The provider's status (e.g. picked_up, in_transit, out_for_delivery, delivered)
+        occurredAt:
+          type: string
+          format: date-time
 
     Error:
       type: object

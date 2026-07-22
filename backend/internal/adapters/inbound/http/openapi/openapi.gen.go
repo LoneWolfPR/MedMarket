@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/oapi-codegen/runtime"
@@ -107,6 +108,15 @@ type RegisterRequest struct {
 	Phone     *string             `json:"phone,omitempty"`
 }
 
+// ShippingWebhookRequest defines model for ShippingWebhookRequest.
+type ShippingWebhookRequest struct {
+	OccurredAt time.Time `json:"occurredAt"`
+
+	// Status The provider's status (e.g. picked_up, in_transit, out_for_delivery, delivered)
+	Status     string `json:"status"`
+	TrackingId string `json:"trackingId"`
+}
+
 // TokenResponse defines model for TokenResponse.
 type TokenResponse struct {
 	Token string `json:"token"`
@@ -163,6 +173,9 @@ type CreateOrderJSONRequestBody = OrderRequest
 // UploadPrescriptionMultipartRequestBody defines body for UploadPrescription for multipart/form-data ContentType.
 type UploadPrescriptionMultipartRequestBody UploadPrescriptionMultipartBody
 
+// ShippingWebhookJSONRequestBody defines body for ShippingWebhook for application/json ContentType.
+type ShippingWebhookJSONRequestBody = ShippingWebhookRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Exchange credentials for a bearer token
@@ -186,6 +199,9 @@ type ServerInterface interface {
 	// Search pharmacies for prices on a prescription's medication
 	// (POST /api/prescriptions/{id}/search)
 	SearchPrescriptionPrices(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Receive a shipping status update from the shipping provider
+	// (POST /webhooks/shipping/{orderID})
+	ShippingWebhook(w http.ResponseWriter, r *http.Request, orderID openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -337,6 +353,32 @@ func (siw *ServerInterfaceWrapper) SearchPrescriptionPrices(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// ShippingWebhook operation middleware
+func (siw *ServerInterfaceWrapper) ShippingWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "orderID" -------------
+	var orderID openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orderID", r.PathValue("orderID"), &orderID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orderID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ShippingWebhook(w, r, orderID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -464,6 +506,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/prescriptions", wrapper.ListPrescriptions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prescriptions/upload", wrapper.UploadPrescription)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prescriptions/{id}/search", wrapper.SearchPrescriptionPrices)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/webhooks/shipping/{orderID}", wrapper.ShippingWebhook)
 
 	return m
 }
@@ -826,6 +869,51 @@ func (response SearchPrescriptionPrices404JSONResponse) VisitSearchPrescriptionP
 	return err
 }
 
+type ShippingWebhookRequestObject struct {
+	OrderID openapi_types.UUID `json:"orderID"`
+	Body    *ShippingWebhookJSONRequestBody
+}
+
+type ShippingWebhookResponseObject interface {
+	VisitShippingWebhookResponse(w http.ResponseWriter) error
+}
+
+type ShippingWebhook202Response struct {
+}
+
+func (response ShippingWebhook202Response) VisitShippingWebhookResponse(w http.ResponseWriter) error {
+	w.WriteHeader(202)
+	return nil
+}
+
+type ShippingWebhook400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ShippingWebhook400JSONResponse) VisitShippingWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ShippingWebhook404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ShippingWebhook404JSONResponse) VisitShippingWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Exchange credentials for a bearer token
@@ -849,6 +937,9 @@ type StrictServerInterface interface {
 	// Search pharmacies for prices on a prescription's medication
 	// (POST /api/prescriptions/{id}/search)
 	SearchPrescriptionPrices(ctx context.Context, request SearchPrescriptionPricesRequestObject) (SearchPrescriptionPricesResponseObject, error)
+	// Receive a shipping status update from the shipping provider
+	// (POST /webhooks/shipping/{orderID})
+	ShippingWebhook(ctx context.Context, request ShippingWebhookRequestObject) (ShippingWebhookResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1078,41 +1169,79 @@ func (sh *strictHandler) SearchPrescriptionPrices(w http.ResponseWriter, r *http
 	}
 }
 
+// ShippingWebhook operation middleware
+func (sh *strictHandler) ShippingWebhook(w http.ResponseWriter, r *http.Request, orderID openapi_types.UUID) {
+	var request ShippingWebhookRequestObject
+
+	request.OrderID = orderID
+
+	var body ShippingWebhookJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ShippingWebhook(ctx, request.(ShippingWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ShippingWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ShippingWebhookResponseObject); ok {
+		if err := validResponse.VisitShippingWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"e94+Iw0i0HVrTzUVaqHmanO5+V8AAAD//w==",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

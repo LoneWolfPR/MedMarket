@@ -124,6 +124,14 @@ func run() error {
 		return fmt.Errorf("failed to setup order starter: %w", err)
 	}
 
+	shippingSignaler, err := temporal.NewShippingSignaler(temporal.NewShippingSignalerParams{
+		Client: temporalClient,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to setup shipping signaler: %w", err)
+	}
+
 	// Outbound adapters
 	userRepo, err := postgres.NewUserRepository(postgres.NewUserRepositoryParams{
 		Client: client,
@@ -192,6 +200,14 @@ func run() error {
 		return fmt.Errorf("failed to set up order service: %w", err)
 	}
 
+	shippingService, err := app.NewShippingService(app.NewShippingServiceParams{
+		Logger:   logger,
+		Signaler: shippingSignaler,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set up shipping signaler: %w", err)
+	}
+
 	// Inbound Adapters
 	authHandler, err := httpapi.NewAuthHandler(httpapi.NewAuthHandlerParams{
 		Logger: logger,
@@ -221,6 +237,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to setup order handler: %w", err)
 	}
+	shippingHandler, err := httpapi.NewShippingHandler(httpapi.NewShippingHandlerParams{
+		Logger: logger,
+		Svc:    shippingService,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set up shipping handler: %w", err)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", healthHandler)
@@ -231,6 +254,7 @@ func run() error {
 		Logger:       logger,
 		TokenIssuer:  tokenIssuer,
 		Order:        orderHandler,
+		Shipping:     shippingHandler,
 	}, mux)
 
 	// Explicit timeouts guard against slow-client attacks (e.g. Slowloris);
