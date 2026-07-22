@@ -46,11 +46,12 @@ func NewPaymentGateway(p NewPaymentGatewayParams) (*PaymentGateway, error) {
 // Authorize sends a transaction to Stripe for authorization. Note: This does not actually transfer funds
 func (g *PaymentGateway) Authorize(ctx context.Context, i outbound.AuthorizeInput) (outbound.AuthorizeResult, error) {
 	authParams := stripe.PaymentIntentCreateParams{
-		Amount:        stripe.Int64(i.Amount.Cents()),
-		Currency:      stripe.String("usd"),
-		PaymentMethod: stripe.String(i.PaymentMethod),
-		CaptureMethod: stripe.String(stripe.PaymentIntentCaptureMethodManual),
-		Confirm:       stripe.Bool(true),
+		Amount:             stripe.Int64(i.Amount.Cents()),
+		Currency:           stripe.String("usd"),
+		PaymentMethod:      stripe.String(i.PaymentMethod),
+		CaptureMethod:      stripe.String(stripe.PaymentIntentCaptureMethodManual),
+		Confirm:            stripe.Bool(true),
+		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
 	}
 	authParams.AddMetadata("order_id", i.OrderID.String())
 	authParams.SetIdempotencyKey("order-" + i.OrderID.String() + ":authorize")

@@ -28,6 +28,7 @@ type config struct {
 	TemporalHostPort    string
 	OfferTTL            time.Duration
 	WebhookBaseURL      string
+	OTLPEndpoint        string
 }
 
 func loadConfig() (config, error) {
@@ -51,6 +52,7 @@ func loadConfig() (config, error) {
 		TemporalHostPort:    r.Require(envkeys.TemporalHostPort),
 		OfferTTL:            r.PositiveDurationOr(envkeys.OfferTTL, defaultOfferTTL),
 		WebhookBaseURL:      r.Require(envkeys.WebhookBaseURL),
+		OTLPEndpoint:        r.Require(envkeys.OTLPEndpoint),
 	}
 	if err := r.Err(); err != nil {
 		return config{}, err

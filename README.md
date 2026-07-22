@@ -104,6 +104,18 @@ as their corresponding phase of the build lands.
 **Prerequisites:** Docker + Docker Compose, Go 1.26, Node 24, and
 [go-task](https://taskfile.dev).
 
+**Environment.** The stack reads secrets from a gitignored `.env` at the repo
+root, which Compose substitutes into `docker-compose.yml`. The one you must set
+yourself is `STRIPE_SECRET_KEY` — a Stripe **test-mode secret** key
+(`sk_test_…`, *not* a publishable `pk_…` key); the payment worker fails to start
+without it. Every other local credential is a dev placeholder baked into
+`docker-compose.yml`.
+
+```sh
+# .env (repo root) — no quotes, no `export`, no spaces around `=`
+STRIPE_SECRET_KEY=sk_test_your_key_here
+```
+
 Start the full local stack:
 
 ```sh
@@ -126,3 +138,22 @@ task backend:check              # build + vet + test + lint the backend
 task backend:test               # run backend unit tests
 task backend:test-integration   # run integration tests (needs Docker; uses testcontainers)
 ```
+
+### Testing
+
+The backend is tested in three tiers, cheapest first:
+
+| Tier        | Command                        | Needs           | Covers |
+| ----------- | ------------------------------ | --------------- | ------ |
+| Unit        | `task backend:test`            | nothing         | Domain logic, app services (with faked ports), and adapters. Fast and Docker-free. |
+| Integration | `task backend:test-integration`| Docker          | Repositories against a real Postgres (testcontainers), the HTTP stack, and a **composition-root boot test** that serves the real `main` graph against a throwaway DB. Build tag `integration`. |
+| Smoke       | `task backend:smoke`           | a running stack | The **full customer journey** (register → login → upload → search → order → status) against the live compose stack through Traefik — real Temporal, MinIO, mock pharmacies, and Stripe test mode. Build tag `smoke`. |
+
+Only the unit tier runs in `task backend:check`, keeping it fast and
+Docker-free; integration and smoke are run on their own. The smoke test is
+end-to-end and has prerequisites:
+
+- The stack must be up (`task up`) with `STRIPE_SECRET_KEY` set.
+- It registers a throwaway user (unique email) each run, so it is safe to
+  re-run and leaves no fixtures to clean up.
+- Override the target with `SMOKE_BASE_URL` (defaults to `http://localhost`).

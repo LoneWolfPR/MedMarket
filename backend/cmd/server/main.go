@@ -8,8 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/LoneWolfPR/MedMarket/backend/ent"
 	httpapi "github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/bcrypt"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/jwt"
@@ -18,10 +21,14 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/temporal"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/app"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/bootstrap"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/telemetry"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	temporalclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/contrib/opentelemetry"
+	"go.temporal.io/sdk/interceptor"
 )
 
 const presignTTL = 15 * time.Minute
@@ -34,6 +41,9 @@ func main() {
 }
 
 func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
@@ -52,19 +62,7 @@ func run() error {
 			logger.Error("failed to close db client", "error", cerr)
 		}
 	}()
-	// Setup File Storage
-	s3Client, err := newFileStorage(cfg, logger)
-	if err != nil {
-		return err
-	}
-	// Setup Prescription Repo
-	rxRepo, err := postgres.NewPrescriptionRepository(postgres.NewPrescriptionRepositoryParams{
-		Client: client,
-		Logger: logger,
-	})
-	if err != nil {
-		return fmt.Errorf("error creating prescription repo: %w", err)
-	}
+
 	// Setup seeding of pharmacy data
 	pharmacyRepo, err := postgres.NewPharmacyRepository(postgres.NewPharmacyRepositoryParams{
 		Client: client,
@@ -78,193 +76,45 @@ func run() error {
 		return fmt.Errorf("error seeding pharmacy data: %w", err)
 	}
 
-	// Setup Offer Repo
-	offerRepo, err := postgres.NewOfferRepository(postgres.NewOfferRepositoryParams{
-		Client: client,
-		Logger: logger,
-	})
+	// Setup Open Telemetry
+	otelShutdown, err := telemetry.Setup(ctx, cfg.OTLPEndpoint, "medmarket-backend")
 	if err != nil {
-		return fmt.Errorf("error creating offer repo: %w", err)
+		return fmt.Errorf("error setting up open telemetry: %w", err)
 	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := otelShutdown(shutdownCtx); err != nil {
+			logger.Error("error shutting down telemetry", "error", err)
+		}
+	}()
 
-	// Setup Order Repo
-	orderRepo, err := postgres.NewOrderRepository(postgres.NewOrderRepositoryParams{
-		Client: client,
-		Logger: logger,
-	})
+	ti, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{})
 	if err != nil {
-		return fmt.Errorf("error creating order repo: %w", err)
+		return fmt.Errorf("error setting up tracing interceptor: %w", err)
 	}
 
 	// Setup Temporal. The API only starts price-search workflows; the worker
 	// executes them, so no worker/activity registration happens here.
 	temporalClient, err := temporalclient.Dial(temporalclient.Options{
-		HostPort:  cfg.TemporalHostPort,
-		Namespace: "default",
+		HostPort:     cfg.TemporalHostPort,
+		Namespace:    "default",
+		Interceptors: []interceptor.ClientInterceptor{ti},
 	})
 	if err != nil {
 		return fmt.Errorf("error setting up temporal client: %w", err)
 	}
 	defer temporalClient.Close()
 
-	priceSearcher, err := temporal.NewPriceSearcher(temporal.NewPriceSearcherParams{
-		Client: temporalClient,
-		Logger: logger,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up price searcher: %w", err)
-	}
-
-	orderStarter, err := temporal.NewOrderStarter(temporal.NewOrderStarterParams{
-		Client:         temporalClient,
+	handler, err := buildHandler(buildHandlerParams{
 		Logger:         logger,
-		WebhookBaseURL: cfg.WebhookBaseURL,
+		Config:         cfg,
+		EntClient:      client,
+		TemporalClient: temporalClient,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to setup order starter: %w", err)
+		return fmt.Errorf("error building handler: %w", err)
 	}
-
-	shippingSignaler, err := temporal.NewShippingSignaler(temporal.NewShippingSignalerParams{
-		Client: temporalClient,
-		Logger: logger,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to setup shipping signaler: %w", err)
-	}
-
-	orderStatusQuerier, err := temporal.NewOrderStatusQuerier(temporal.NewOrderStatusQuerierParams{
-		Client: temporalClient,
-		Logger: logger,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up order status querier: %w", err)
-	}
-
-	// Outbound adapters
-	userRepo, err := postgres.NewUserRepository(postgres.NewUserRepositoryParams{
-		Client: client,
-		Logger: logger,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up user repository: %w", err)
-	}
-
-	hasher, err := bcrypt.NewPasswordHasher(bcrypt.NewPasswordHasherParams{
-		Logger: logger,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up password hasher: %w", err)
-	}
-
-	tokenIssuer, err := jwt.NewTokenIssuer(jwt.NewTokenIssuerParams{
-		Logger: logger,
-		Secret: cfg.JWTSecret,
-		TTL:    cfg.JWTTTL,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up token issuer: %w", err)
-	}
-
-	// Application Services
-	userService, err := app.NewUserService(app.NewUserServiceParams{
-		Logger:         logger,
-		UserRepository: userRepo,
-		PasswordHasher: hasher,
-		TokenIssuer:    tokenIssuer,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up user service: %w", err)
-	}
-	rxService, err := app.NewPrescriptionService(app.NewPrescriptionServiceParams{
-		Logger:           logger,
-		PrescriptionRepo: rxRepo,
-		FileStorage:      s3Client,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up prescription service: %w", err)
-	}
-	priceSearchService, err := app.NewPriceSearchService(app.NewPriceSearchServiceParams{
-		Logger:    logger,
-		RxRepo:    rxRepo,
-		PharmRepo: pharmacyRepo,
-		Searcher:  priceSearcher,
-		OfferRepo: offerRepo,
-		OfferTTL:  cfg.OfferTTL,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up price search service: %w", err)
-	}
-
-	orderService, err := app.NewOrderService(app.NewOrderServiceParams{
-		Logger:       logger,
-		OrderRepo:    orderRepo,
-		OfferRepo:    offerRepo,
-		PharmRepo:    pharmacyRepo,
-		RxRepo:       rxRepo,
-		UserRepo:     userRepo,
-		OrderStarter: orderStarter,
-		Querier:      orderStatusQuerier,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up order service: %w", err)
-	}
-
-	shippingService, err := app.NewShippingService(app.NewShippingServiceParams{
-		Logger:   logger,
-		Signaler: shippingSignaler,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up shipping signaler: %w", err)
-	}
-
-	// Inbound Adapters
-	authHandler, err := httpapi.NewAuthHandler(httpapi.NewAuthHandlerParams{
-		Logger: logger,
-		Svc:    userService,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to setup auth handler: %w", err)
-	}
-	rxHandler, err := httpapi.NewPrescriptionHandler(httpapi.NewPrescriptionHandlerParams{
-		Logger: logger,
-		Svc:    rxService,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to setup prescription handler: %w", err)
-	}
-	priceSearchHandler, err := httpapi.NewPriceSearchHandler(httpapi.NewPriceSearchHandlerParams{
-		Logger: logger,
-		Svc:    priceSearchService,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to setup price search handler: %w", err)
-	}
-	orderHandler, err := httpapi.NewOrderHandler(httpapi.NewOrderHandlerParams{
-		Logger: logger,
-		Svc:    orderService,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to setup order handler: %w", err)
-	}
-	shippingHandler, err := httpapi.NewShippingHandler(httpapi.NewShippingHandlerParams{
-		Logger: logger,
-		Svc:    shippingService,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to set up shipping handler: %w", err)
-	}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/health", healthHandler)
-	handler := httpapi.NewAPI(httpapi.NewAPIParams{
-		Auth:         authHandler,
-		Prescription: rxHandler,
-		Search:       priceSearchHandler,
-		Logger:       logger,
-		TokenIssuer:  tokenIssuer,
-		Order:        orderHandler,
-		Shipping:     shippingHandler,
-	}, mux)
 
 	// Explicit timeouts guard against slow-client attacks (e.g. Slowloris);
 	// the bare http.ListenAndServe uses a zero-value server with none, which
@@ -279,10 +129,232 @@ func run() error {
 	}
 
 	logger.Info("backend listening", "addr", srv.Addr)
-	if err := srv.ListenAndServe(); err != nil {
-		return fmt.Errorf("server failed: %w", err)
+	srvErr := make(chan error, 1)
+	go func() {
+		srvErr <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-srvErr:
+		return err
+	case <-ctx.Done():
+		shutDownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return srv.Shutdown(shutDownCtx)
 	}
-	return nil
+}
+
+type buildHandlerParams struct {
+	Logger         *slog.Logger
+	Config         config
+	EntClient      *ent.Client
+	TemporalClient temporalclient.Client
+}
+
+func buildHandler(p buildHandlerParams) (http.Handler, error) {
+	// Setup File Storage
+	s3Client, err := newFileStorage(p.Config, p.Logger)
+	if err != nil {
+		return nil, err
+	}
+	// Setup Prescription Repo
+	rxRepo, err := postgres.NewPrescriptionRepository(postgres.NewPrescriptionRepositoryParams{
+		Client: p.EntClient,
+		Logger: p.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating prescription repo: %w", err)
+	}
+
+	// Pharmacy Repo
+	pharmacyRepo, err := postgres.NewPharmacyRepository(postgres.NewPharmacyRepositoryParams{
+		Client: p.EntClient,
+		Logger: p.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating pharmacy repo: %w", err)
+	}
+
+	// Setup Offer Repo
+	offerRepo, err := postgres.NewOfferRepository(postgres.NewOfferRepositoryParams{
+		Client: p.EntClient,
+		Logger: p.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating offer repo: %w", err)
+	}
+
+	// Setup Order Repo
+	orderRepo, err := postgres.NewOrderRepository(postgres.NewOrderRepositoryParams{
+		Client: p.EntClient,
+		Logger: p.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating order repo: %w", err)
+	}
+
+	priceSearcher, err := temporal.NewPriceSearcher(temporal.NewPriceSearcherParams{
+		Client: p.TemporalClient,
+		Logger: p.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up price searcher: %w", err)
+	}
+
+	orderStarter, err := temporal.NewOrderStarter(temporal.NewOrderStarterParams{
+		Client:         p.TemporalClient,
+		Logger:         p.Logger,
+		WebhookBaseURL: p.Config.WebhookBaseURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup order starter: %w", err)
+	}
+
+	shippingSignaler, err := temporal.NewShippingSignaler(temporal.NewShippingSignalerParams{
+		Client: p.TemporalClient,
+		Logger: p.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup shipping signaler: %w", err)
+	}
+
+	orderStatusQuerier, err := temporal.NewOrderStatusQuerier(temporal.NewOrderStatusQuerierParams{
+		Client: p.TemporalClient,
+		Logger: p.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up order status querier: %w", err)
+	}
+
+	// Outbound adapters
+	userRepo, err := postgres.NewUserRepository(postgres.NewUserRepositoryParams{
+		Client: p.EntClient,
+		Logger: p.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up user repository: %w", err)
+	}
+
+	hasher, err := bcrypt.NewPasswordHasher(bcrypt.NewPasswordHasherParams{
+		Logger: p.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up password hasher: %w", err)
+	}
+
+	tokenIssuer, err := jwt.NewTokenIssuer(jwt.NewTokenIssuerParams{
+		Logger: p.Logger,
+		Secret: p.Config.JWTSecret,
+		TTL:    p.Config.JWTTTL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up token issuer: %w", err)
+	}
+
+	// Application Services
+	userService, err := app.NewUserService(app.NewUserServiceParams{
+		Logger:         p.Logger,
+		UserRepository: userRepo,
+		PasswordHasher: hasher,
+		TokenIssuer:    tokenIssuer,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up user service: %w", err)
+	}
+	rxService, err := app.NewPrescriptionService(app.NewPrescriptionServiceParams{
+		Logger:           p.Logger,
+		PrescriptionRepo: rxRepo,
+		FileStorage:      s3Client,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up prescription service: %w", err)
+	}
+	priceSearchService, err := app.NewPriceSearchService(app.NewPriceSearchServiceParams{
+		Logger:    p.Logger,
+		RxRepo:    rxRepo,
+		PharmRepo: pharmacyRepo,
+		Searcher:  priceSearcher,
+		OfferRepo: offerRepo,
+		OfferTTL:  p.Config.OfferTTL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up price search service: %w", err)
+	}
+
+	orderService, err := app.NewOrderService(app.NewOrderServiceParams{
+		Logger:       p.Logger,
+		OrderRepo:    orderRepo,
+		OfferRepo:    offerRepo,
+		PharmRepo:    pharmacyRepo,
+		RxRepo:       rxRepo,
+		UserRepo:     userRepo,
+		OrderStarter: orderStarter,
+		Querier:      orderStatusQuerier,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up order service: %w", err)
+	}
+
+	shippingService, err := app.NewShippingService(app.NewShippingServiceParams{
+		Logger:   p.Logger,
+		Signaler: shippingSignaler,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up shipping signaler: %w", err)
+	}
+
+	// Inbound Adapters
+	authHandler, err := httpapi.NewAuthHandler(httpapi.NewAuthHandlerParams{
+		Logger: p.Logger,
+		Svc:    userService,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup auth handler: %w", err)
+	}
+	rxHandler, err := httpapi.NewPrescriptionHandler(httpapi.NewPrescriptionHandlerParams{
+		Logger: p.Logger,
+		Svc:    rxService,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup prescription handler: %w", err)
+	}
+	priceSearchHandler, err := httpapi.NewPriceSearchHandler(httpapi.NewPriceSearchHandlerParams{
+		Logger: p.Logger,
+		Svc:    priceSearchService,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup price search handler: %w", err)
+	}
+	orderHandler, err := httpapi.NewOrderHandler(httpapi.NewOrderHandlerParams{
+		Logger: p.Logger,
+		Svc:    orderService,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup order handler: %w", err)
+	}
+	shippingHandler, err := httpapi.NewShippingHandler(httpapi.NewShippingHandlerParams{
+		Logger: p.Logger,
+		Svc:    shippingService,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set up shipping handler: %w", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/health", healthHandler)
+	mux.HandleFunc("GET /api/openapi.yaml", openAPISpecHandler)
+	mux.HandleFunc("GET /api/docs", docsHandler)
+	handler := httpapi.NewAPI(httpapi.NewAPIParams{
+		Auth:         authHandler,
+		Prescription: rxHandler,
+		Search:       priceSearchHandler,
+		Logger:       p.Logger,
+		TokenIssuer:  tokenIssuer,
+		Order:        orderHandler,
+		Shipping:     shippingHandler,
+	}, mux)
+	handlerWithOtel := otelhttp.NewHandler(handler, "http.server")
+	return handlerWithOtel, nil
 }
 
 // newFileStorage builds the S3/MinIO-backed file storage adapter. It uses two

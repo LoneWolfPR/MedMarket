@@ -15,10 +15,10 @@ tasks:
 
   lint:
     desc: Run golangci-lint (uses the repo-root .golangci.yml)
-    # --build-tags=integration so build-tagged integration test files are linted
-    # too (static analysis only — no Docker needed).
+    # --build-tags so build-tagged test files (integration, smoke) are linted too
+    # (static analysis only — no Docker or running stack needed).
     cmds:
-      - golangci-lint run --build-tags=integration ./...
+      - golangci-lint run --build-tags=integration,smoke ./...
 
   test:
     desc: Run backend unit tests
@@ -29,6 +29,14 @@ tasks:
     desc: Run integration tests (needs Docker; uses testcontainers). Excluded from `check`.
     cmds:
       - go test -tags=integration ./...
+
+  smoke:
+    desc: >-
+      Run the end-to-end smoke journey against a RUNNING stack (task up).
+      Needs the full compose stack + STRIPE_SECRET_KEY. Override the target with
+      SMOKE_BASE_URL. Excluded from `check`.
+    cmds:
+      - go test -tags=smoke -count=1 -run TestSmokeJourney ./cmd/server/ -v
 
   tidy:
     desc: Tidy and verify go.mod / go.sum

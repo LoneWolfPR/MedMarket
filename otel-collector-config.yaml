@@ -1,0 +1,42 @@
+# OpenTelemetry Collector config. The app (backend + worker) speaks OTLP to this
+# collector and knows nothing about the trace backend; the collector is where the
+# backend is chosen. Locally it fans traces out to Jaeger (a UI to view them) and
+# to the debug exporter (logged to the collector's stdout). In GKE, add a
+# `googlecloud` exporter (Cloud Trace) and list it in the traces pipeline — an
+# infra change here, with no change to the application code.
+
+receivers:
+  # Accept OTLP over both gRPC (4317) and HTTP (4318). The app uses gRPC.
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Batch spans before export — fewer, larger export calls.
+  batch: {}
+
+exporters:
+  # Forward to Jaeger's own OTLP receiver (all-in-one, COLLECTOR_OTLP_ENABLED).
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  # Echo a summary of every span to the collector's stdout — handy for
+  # confirming spans are arriving without opening the Jaeger UI.
+  debug:
+    verbosity: normal
+
+  # --- GKE / production (add when deploying) --------------------------------
+  # googlecloud:
+  #   project: <gcp-project-id>   # or rely on workload-identity / GOOGLE_CLOUD_PROJECT
+  # Then add `googlecloud` to the traces pipeline exporters below.
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger, debug]

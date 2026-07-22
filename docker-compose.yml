@@ -59,6 +59,8 @@ services:
       # dials Temporal too.
       - TEMPORAL_HOSTPORT=temporal:7233
       - WEBHOOK_BASE_URL=http://backend:8080
+      # OTLP sink (the collector); host:port for otlptracegrpc's WithEndpoint.
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     labels:
       - "traefik.enable=true"
       # PathPrefix(/api) is longer than the frontend's PathPrefix(/), so Traefik
@@ -104,6 +106,8 @@ services:
       - SMTP_PORT=1025
       - SMTP_FROM=no-reply@medmarket.local
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      # OTLP sink (the collector); host:port for otlptracegrpc's WithEndpoint.
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -329,6 +333,35 @@ services:
     depends_on:
       temporal:
         condition: service_healthy
+    networks:
+      - medmarket
+
+  # --- Observability ----------------------------------------------------------
+  # OpenTelemetry Collector: the single OTLP sink the backend + worker export to.
+  # It owns the choice of trace backend (Jaeger locally, Cloud Trace on GKE), so
+  # the app stays vendor-neutral — it only knows how to speak OTLP to this host.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      - jaeger
+    networks:
+      - medmarket
+
+  # Jaeger all-in-one — local trace UI. COLLECTOR_OTLP_ENABLED makes it accept
+  # OTLP (on 4317/4318) from the collector. Web UI (16686) is routed through
+  # Traefik at http://jaeger.localhost, like the other dashboards.
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jaeger.rule=Host(`jaeger.localhost`)"
+      - "traefik.http.routers.jaeger.entrypoints=web"
+      - "traefik.http.services.jaeger.loadbalancer.server.port=16686"
     networks:
       - medmarket
 

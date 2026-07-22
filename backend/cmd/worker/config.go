@@ -16,6 +16,7 @@ type config struct {
 	SMTPPort         string
 	SMTPFrom         string
 	StripeSecretKey  string
+	OTLPEndpoint     string
 }
 
 func loadConfig() (config, error) {
@@ -32,6 +33,7 @@ func loadConfig() (config, error) {
 		SMTPPort:         r.Require(envkeys.SMTPPort),
 		SMTPFrom:         r.Require(envkeys.SMTPFrom),
 		StripeSecretKey:  r.Require(envkeys.StripeSecretKey),
+		OTLPEndpoint:     r.Require(envkeys.OTLPEndpoint),
 	}
 	if err := r.Err(); err != nil {
 		return config{}, err

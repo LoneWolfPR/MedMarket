@@ -53,6 +53,7 @@ func NewAPI(p NewAPIParams, mux openapi.ServeMux) http.Handler {
 		"GetOrderStatus":           {},
 	}
 	authMW := newAuthMiddleware(p.TokenIssuer, protected)
+	tracingMW := newTracingMiddleware()
 
 	// Body-binding and handler errors, raised inside the strict handler.
 	strictOpts := openapi.StrictHTTPServerOptions{
@@ -72,12 +73,12 @@ func NewAPI(p NewAPIParams, mux openapi.ServeMux) http.Handler {
 			writeJSONError(w, http.StatusInternalServerError, msgInternalServerError)
 		},
 	}
-	api := openapi.NewStrictHandlerWithOptions(s, []openapi.StrictMiddlewareFunc{authMW}, strictOpts)
+	api := openapi.NewStrictHandlerWithOptions(s, []openapi.StrictMiddlewareFunc{authMW, tracingMW}, strictOpts)
 
 	// Path- and query-parameter binding runs before the strict handler is reached,
 	// so its failures surface on this separate hook. Without it the generated
 	// default renders text/plain, breaking the spec's Error schema contract.
-	return openapi.HandlerWithOptions(api, openapi.StdHTTPServerOptions{
+	apiHandler := openapi.HandlerWithOptions(api, openapi.StdHTTPServerOptions{
 		BaseRouter: mux,
 		ErrorHandlerFunc: func(
 			w http.ResponseWriter,
@@ -87,4 +88,5 @@ func NewAPI(p NewAPIParams, mux openapi.ServeMux) http.Handler {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 		},
 	})
+	return newLoggingMiddleware(p.Logger)(apiHandler)
 }

@@ -125,6 +125,9 @@ func TestAuthorize_HappyPathSendsCorrectRequest(t *testing.T) {
 		assert.Equal(t, "manual", r.PostForm.Get("capture_method"))
 		assert.Equal(t, "true", r.PostForm.Get("confirm"))
 		assert.Equal(t, in.OrderID.String(), r.PostForm.Get("metadata[order_id]"))
+		// Pinned to card only, so Stripe never enables redirect-based payment
+		// methods that would demand a return_url this server-side flow can't give.
+		assert.Equal(t, "card", r.PostForm.Get("payment_method_types[0]"))
 
 		okJSON(w, r)
 	})

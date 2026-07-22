@@ -19,11 +19,15 @@ import (
 	internalstripe "github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/stripe"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/bootstrap"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/telemetry"
 	"github.com/LoneWolfPR/MedMarket/backend/workflows/order"
 	"github.com/LoneWolfPR/MedMarket/backend/workflows/pricesearch"
 
 	"github.com/stripe/stripe-go/v86"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	temporalclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/contrib/opentelemetry"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 )
@@ -46,6 +50,19 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
+
+	// Setup Open Telemetry
+	otelShutdown, err := telemetry.Setup(ctx, cfg.OTLPEndpoint, "medmarket-worker")
+	if err != nil {
+		return fmt.Errorf("error setting up open telemetry: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := otelShutdown(shutdownCtx); err != nil {
+			logger.Error("error shutting down telemetry", "error", err)
+		}
+	}()
 
 	// Setup DB
 	client, err := bootstrap.NewEntClient(cfg.DatabaseURL)
@@ -73,7 +90,8 @@ func run() error {
 
 	// Setup pharmacy adapters
 	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout:   10 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
 	pharmA, err := pharmacyRepo.GetByCode(ctx, bootstrap.PharmacyACode)
 	if err != nil {
@@ -158,9 +176,16 @@ func run() error {
 		EmailSender:    mailerAdapter,
 		PaymentGateway: paymentGateway,
 	})
+
+	ti, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{})
+	if err != nil {
+		return fmt.Errorf("error setting up tracing interceptor: %w", err)
+	}
+
 	c, err := temporalclient.Dial(temporalclient.Options{
-		HostPort:  cfg.TemporalHostPort,
-		Namespace: "default",
+		HostPort:     cfg.TemporalHostPort,
+		Namespace:    "default",
+		Interceptors: []interceptor.ClientInterceptor{ti},
 	})
 	if err != nil {
 		return fmt.Errorf("error setting up temporal client: %w", err)
