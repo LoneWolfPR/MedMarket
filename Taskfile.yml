@@ -29,3 +29,13 @@ tasks:
     desc: Tail logs from the running stack
     cmds:
       - docker compose logs -f
+
+  cluster-up:
+    desc: scale the pool back to working capacity
+    cmds:
+      - gcloud container clusters resize medmarket --node-pool medmarket-pool --num-nodes 2 --zone us-central1-a --quiet
+
+  cluster-down:
+    desc: park it at $0 (the end-of-day command)
+    cmds:
+      - gcloud container clusters resize medmarket --node-pool medmarket-pool --num-nodes 0 --zone us-central1-a --quiet
