@@ -1,0 +1,21 @@
+# Production image: build the static bundle with the full Node toolchain, then
+# serve it from nginx. The final image carries no Node, no source, no toolchain.
+FROM node:24-alpine AS build
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm install
+
+COPY . .
+# `npm run build` = `tsc && vite build` (tsc needs the devDependencies installed
+# above); emits the static site to /app/dist.
+RUN npm run build
+
+# Stage 2 — nginx serving the built assets. The custom config replaces nginx's
+# default server block with SPA-aware routing.
+FROM nginx:alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+# nginx:alpine's base image already runs nginx in the foreground.

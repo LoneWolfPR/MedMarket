@@ -1,0 +1,33 @@
+# Production-image override. Layer it on top of the base compose:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+#
+# Its only job is a LOCAL sanity check that the production images build and serve
+# correctly on the same network. The real production target is the Kubernetes
+# manifests under k8s/, not compose — so this override changes only what actually
+# differs in a production build: the frontend, which swaps the Vite dev server
+# for a static nginx image. Backend, worker, and the mock services already build
+# production images from the base compose (distroless / `node server.js`), so
+# they need no override here.
+name: medmarket
+
+services:
+  frontend:
+    build:
+      # context (./frontend) is inherited from the base file; only the
+      # Dockerfile changes — a multi-stage build that serves via nginx.
+      dockerfile: Dockerfile.prod
+    # Drop the dev bind-mounts (source + an anonymous node_modules volume): the
+    # built assets are baked into the image and a mount over /app would shadow
+    # them. `!reset` clears the key inherited from the base file — Compose
+    # otherwise appends sequences rather than replacing them.
+    volumes: !reset null
+    # The base labels point Traefik at the Vite dev port (5173); the nginx image
+    # listens on 80. `!override` replaces the whole label list instead of
+    # appending, which would otherwise leave two conflicting
+    # loadbalancer.server.port entries.
+    labels: !override
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
