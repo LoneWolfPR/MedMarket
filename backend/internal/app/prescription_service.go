@@ -104,7 +104,7 @@ func (s *PrescriptionService) Upload(
 		s.logger.ErrorContext(
 			ctx,
 			"error generating presigned url",
-			"prescription id", newPrescription.ID,
+			"prescription_id", newPrescription.ID,
 			"error", err)
 	}
 
@@ -132,7 +132,7 @@ func (s *PrescriptionService) GetPrescription(
 	}
 	docURL, err := s.fileStorage.GetPresignedURL(ctx, rx.DocumentKey)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "error generating presigned url", "prescription id", rx.ID, "error", err)
+		s.logger.ErrorContext(ctx, "error generating presigned url", "prescription_id", rx.ID, "error", err)
 	}
 	return inbound.PrescriptionView{
 		Prescription: ptr.Deref(rx),
@@ -155,7 +155,7 @@ func (s *PrescriptionService) GetPrescriptionList(
 		// If there's an error generating a url we want to log it, but continue adding the information to the list
 		// without failing
 		if err != nil {
-			s.logger.ErrorContext(ctx, "error generating url for document", "prescription id", rx.ID, "error", err)
+			s.logger.ErrorContext(ctx, "error generating presigned url", "prescription_id", rx.ID, "error", err)
 		}
 		result = append(result, inbound.PrescriptionView{
 			Prescription: rx,

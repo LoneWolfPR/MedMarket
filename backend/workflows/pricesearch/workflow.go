@@ -65,10 +65,10 @@ func PriceSearchWorkflow(ctx workflow.Context, i SearchInput) ([]QuoteResult, er
 		}
 		futures = append(futures, workflow.ExecuteActivity(ctx, a.SearchPharmacyActivity, inputParams))
 	}
-	for _, future := range futures {
+	for idx, future := range futures {
 		var result []QuoteResult
 		if searchErr := future.Get(ctx, &result); searchErr != nil {
-			logger.Warn("error getting price quote", "error", searchErr)
+			logger.Warn("error getting price quote", "pharmacy_code", infos[idx].Code, "error", searchErr)
 			continue
 		}
 		results = append(results, result...)

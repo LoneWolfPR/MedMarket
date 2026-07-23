@@ -21,14 +21,17 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/temporal"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/app"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/bootstrap"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/envkeys"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/telemetry"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	temporalclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
+	temporallog "go.temporal.io/sdk/log"
 )
 
 const presignTTL = 15 * time.Minute
@@ -44,7 +47,15 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	var logLevel slog.Level
+	err := logLevel.UnmarshalText([]byte(os.Getenv(envkeys.LogLevel)))
+	if err != nil {
+		logLevel = slog.LevelInfo
+	}
+	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: logLevel,
+	})
+	logger := slog.New(jsonHandler)
 	slog.SetDefault(logger)
 
 	// Env Config
@@ -52,6 +63,37 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
+
+	// Setup Open Telemetry
+	otelShutdown, err := telemetry.Setup(ctx, cfg.OTLPEndpoint, "medmarket-backend")
+	if err != nil {
+		return fmt.Errorf("error setting up open telemetry: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := otelShutdown(shutdownCtx); err != nil {
+			logger.Error("error shutting down telemetry", "error", err)
+		}
+	}()
+
+	// Now the otel is setup add it to the logging via a fanout handler so we preserve the stdout logger
+	otelHandler := otelslog.NewHandler("medmarket-backend")
+	fanoutHandler, err := telemetry.NewHandler([]slog.Handler{
+		jsonHandler,
+		otelHandler,
+	}, logLevel)
+	if err != nil {
+		return fmt.Errorf("error setting up logging handlers: %w", err)
+	}
+	logger = slog.New(fanoutHandler)
+	slog.SetDefault(logger)
+
+	ti, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{})
+	if err != nil {
+		return fmt.Errorf("error setting up tracing interceptor: %w", err)
+	}
+
 	// Setup DB
 	client, err := bootstrap.NewEntClient(cfg.DatabaseURL)
 	if err != nil {
@@ -72,26 +114,8 @@ func run() error {
 		return fmt.Errorf("error creating pharmacy repo: %w", err)
 	}
 
-	if err := bootstrap.SeedPharmacies(context.Background(), pharmacyRepo); err != nil {
+	if err := bootstrap.SeedPharmacies(context.Background(), logger, pharmacyRepo); err != nil {
 		return fmt.Errorf("error seeding pharmacy data: %w", err)
-	}
-
-	// Setup Open Telemetry
-	otelShutdown, err := telemetry.Setup(ctx, cfg.OTLPEndpoint, "medmarket-backend")
-	if err != nil {
-		return fmt.Errorf("error setting up open telemetry: %w", err)
-	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := otelShutdown(shutdownCtx); err != nil {
-			logger.Error("error shutting down telemetry", "error", err)
-		}
-	}()
-
-	ti, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{})
-	if err != nil {
-		return fmt.Errorf("error setting up tracing interceptor: %w", err)
 	}
 
 	// Setup Temporal. The API only starts price-search workflows; the worker
@@ -100,6 +124,7 @@ func run() error {
 		HostPort:     cfg.TemporalHostPort,
 		Namespace:    "default",
 		Interceptors: []interceptor.ClientInterceptor{ti},
+		Logger:       temporallog.NewStructuredLogger(logger),
 	})
 	if err != nil {
 		return fmt.Errorf("error setting up temporal client: %w", err)

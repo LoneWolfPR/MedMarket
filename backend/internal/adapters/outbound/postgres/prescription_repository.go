@@ -64,7 +64,7 @@ func (r *PrescriptionRepository) Create(
 	if err != nil {
 		return nil, fmt.Errorf("error creating prescription record: %w", err)
 	}
-	r.logger.DebugContext(ctx, "prescription record created", "id", rxRecord.ID)
+	r.logger.DebugContext(ctx, "prescription record created", "prescription_id", rxRecord.ID)
 	return mapToDomainPrescription(rxRecord)
 }
 
@@ -82,7 +82,7 @@ func (r *PrescriptionRepository) GetByID(
 		}
 		return nil, fmt.Errorf("error fetching prescription by id: %w", err)
 	}
-	r.logger.DebugContext(ctx, "prescription record found for id", "id", id)
+	r.logger.DebugContext(ctx, "prescription record found", "prescription_id", id)
 	return mapToDomainPrescription(rxRecord)
 }
 
@@ -104,8 +104,8 @@ func (r *PrescriptionRepository) List(
 			r.logger.ErrorContext(
 				ctx,
 				"error mapping prescription record",
-				"userId", userID,
-				"prescription id", rxRecord.ID,
+				"user_id", userID,
+				"prescription_id", rxRecord.ID,
 				"error", err)
 		} else {
 			rxList = append(rxList, ptr.Deref(rx))

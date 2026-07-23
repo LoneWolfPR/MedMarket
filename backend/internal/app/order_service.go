@@ -156,7 +156,7 @@ func (s *OrderService) PlaceOrder(ctx context.Context, i inbound.OrderInput) (in
 			s.logger.ErrorContext(
 				ctx,
 				"error updating order record after failed start",
-				"order id", orderRecord.ID,
+				"order_id", orderRecord.ID,
 				"error", updateErr)
 		}
 		return inbound.OrderView{}, fmt.Errorf("error starting order: %w", err)

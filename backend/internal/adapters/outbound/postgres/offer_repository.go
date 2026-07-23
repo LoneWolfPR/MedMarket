@@ -55,7 +55,7 @@ func (r *OfferRepository) Create(ctx context.Context, offer *pharmacy.Offer) (*p
 	if err != nil {
 		return nil, fmt.Errorf("error saving offer record: %w", err)
 	}
-	r.logger.DebugContext(ctx, "offer record created", "id", offerRecord.ID)
+	r.logger.DebugContext(ctx, "offer record created", "offer_id", offerRecord.ID)
 	return mapToDomainOffer(offerRecord)
 }
 

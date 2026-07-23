@@ -86,9 +86,9 @@ func (s *OrderStarter) StartOrder(ctx context.Context, i order.PlacementRequest)
 	s.logger.InfoContext(
 		ctx,
 		"order workflow started",
-		"workflow id",
+		"workflow_id",
 		run.GetID(),
-		"run id",
+		"run_id",
 		run.GetRunID(),
 	)
 

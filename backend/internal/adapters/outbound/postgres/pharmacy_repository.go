@@ -118,7 +118,7 @@ func (r *PharmacyRepository) List(ctx context.Context) ([]pharmacy.Pharmacy, err
 		if err != nil {
 			// We don't want to fail if individual records have problems, but it should
 			// be logged for tracking
-			r.logger.WarnContext(ctx, "error mapping pharmacy", "id", record.ID, "error", err)
+			r.logger.WarnContext(ctx, "error mapping pharmacy", "pharmacy_id", record.ID, "error", err)
 		} else {
 			pharmacies = append(pharmacies, ptr.Deref(pharm))
 		}

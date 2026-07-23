@@ -30,4 +30,5 @@ const (
 	SMTPFrom            = "SMTP_FROM"
 	StripeSecretKey     = "STRIPE_SECRET_KEY" //nolint:gosec // G101: env var name, not a credential
 	OTLPEndpoint        = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	LogLevel            = "LOG_LEVEL"
 )

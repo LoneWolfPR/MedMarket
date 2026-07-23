@@ -69,7 +69,8 @@ func (m *Mailer) Send(ctx context.Context, params outbound.EmailSenderParams) er
 		return fmt.Errorf("error sending mail: %w", err)
 	}
 
-	m.logger.DebugContext(ctx, "email successfully sent to", "recipient", params.To.String())
+	// Deliberately no recipient attr — the address is PII/PHI and must stay out of logs.
+	m.logger.DebugContext(ctx, "email sent")
 	return nil
 }
 

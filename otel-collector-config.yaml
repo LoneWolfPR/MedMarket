@@ -1,9 +1,12 @@
 # OpenTelemetry Collector config. The app (backend + worker) speaks OTLP to this
-# collector and knows nothing about the trace backend; the collector is where the
-# backend is chosen. Locally it fans traces out to Jaeger (a UI to view them) and
-# to the debug exporter (logged to the collector's stdout). In GKE, add a
-# `googlecloud` exporter (Cloud Trace) and list it in the traces pipeline — an
-# infra change here, with no change to the application code.
+# collector and knows nothing about the trace/log backends; the collector is
+# where the backend is chosen. Locally it fans traces out to Jaeger (a UI to
+# view them) and to the debug exporter (logged to the collector's stdout); logs
+# have no local backend (Jaeger is traces-only), so the debug exporter IS the
+# local log sink — records with trace_id/span_id visible in the collector's
+# stdout. In GKE, add a `googlecloud` exporter (Cloud Trace / Cloud Logging)
+# and list it in the pipelines — an infra change here, with no change to the
+# application code.
 
 receivers:
   # Accept OTLP over both gRPC (4317) and HTTP (4318). The app uses gRPC.
@@ -29,10 +32,16 @@ exporters:
   debug:
     verbosity: normal
 
+  # Log records get their own debug exporter entry so verbosity can be tuned
+  # independently of the trace summary (detailed prints each record's body,
+  # attributes, and trace correlation ids).
+  debug/logs:
+    verbosity: detailed
+
   # --- GKE / production (add when deploying) --------------------------------
   # googlecloud:
   #   project: <gcp-project-id>   # or rely on workload-identity / GOOGLE_CLOUD_PROJECT
-  # Then add `googlecloud` to the traces pipeline exporters below.
+  # Then add `googlecloud` to the traces + logs pipeline exporters below.
 
 service:
   pipelines:
@@ -40,3 +49,7 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlp/jaeger, debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug/logs]

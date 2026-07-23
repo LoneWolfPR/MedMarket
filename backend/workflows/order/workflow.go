@@ -134,6 +134,17 @@ func OrderWorkflow(ctx workflow.Context, i Input) error {
 	if placeOrderErr != nil {
 		return handlePlacementFailure(ctx, i, authID, placeOrderErr)
 	}
+	// If the re-quote is different than the offer log the difference, but we're capturing what was offered
+	if placeOrderResult.NewTotalCents != i.AmountCents {
+		logger.Warn("amount quoted during order differed from amount offered",
+			"order_id",
+			i.OrderID,
+			"amount_offered",
+			i.AmountCents,
+			"new_quoted_amount",
+			placeOrderResult.NewTotalCents,
+		)
+	}
 
 	// Capture Payment if an authorization occurred
 	if paid && authID != "" {
@@ -144,7 +155,7 @@ func OrderWorkflow(ctx workflow.Context, i Input) error {
 
 		err := workflow.ExecuteActivity(ctx, a.CapturePaymentActivity, captureInput).Get(ctx, nil)
 		if err != nil {
-			logger.Error("error capturing payment", "order id", i.OrderID, "error", err)
+			logger.Error("error capturing payment", "order_id", i.OrderID, "error", err)
 			pricePaid = nil
 		}
 	}
@@ -181,9 +192,16 @@ func OrderWorkflow(ctx workflow.Context, i Input) error {
 	handleSignal := func(payload SignalPayload) {
 		// Make sure the incoming status is not outdated
 		if slices.Index(statusRank, payload.Status) > slices.Index(statusRank, status) {
+			logger.Info("shipping status advanced",
+				"old_status",
+				status,
+				"new_status",
+				payload.Status,
+			)
 			status = payload.Status
 			newOrderStatus := mapToOrderStatus(status)
 			if status == StatusDelivered {
+				logger.Info("order delivered; closing", "order_id", i.OrderID)
 				done = true
 			}
 			if newOrderStatus != orderStatus {
@@ -193,7 +211,7 @@ func OrderWorkflow(ctx workflow.Context, i Input) error {
 				})
 				if err != nil {
 					// log but don't fail. failure to update the record is not a failure of shipping
-					logger.Error("error updating order", "order id", i.OrderID, "error", err)
+					logger.Error("error updating order", "order_id", i.OrderID, "error", err)
 				}
 				orderStatus = newOrderStatus
 			}
@@ -213,6 +231,13 @@ func OrderWorkflow(ctx workflow.Context, i Input) error {
 				// don't fail the flow just because an email fails to send
 				logger.Error("error sending email notification", "error", emailErr)
 			}
+		} else {
+			logger.Warn("stale shipping signal ignored",
+				"current_status",
+				status,
+				"incoming_status",
+				payload.Status,
+			)
 		}
 	}
 
@@ -228,7 +253,7 @@ func OrderWorkflow(ctx workflow.Context, i Input) error {
 	lifetimeTimer := workflow.NewTimer(timerCtx, maxOrderLifetime)
 	selector.AddFuture(lifetimeTimer, func(workflow.Future) {
 		done = true
-		logger.Info("order lifetime elapsed; closing", "order id", i.OrderID)
+		logger.Info("order lifetime elapsed; closing", "order_id", i.OrderID)
 	})
 	for !done {
 		selector.Select(ctx)
@@ -269,7 +294,7 @@ func handlePlacementFailure(
 			if authID != "" {
 				if voidErr := voidPayment(ctx, authID); voidErr != nil {
 					logger.Error("error voiding payment for failed order",
-						"order id", i.OrderID,
+						"order_id", i.OrderID,
 						"error", voidErr,
 					)
 				}
@@ -293,7 +318,7 @@ func handlePlacementFailure(
 			if authID != "" {
 				if voidErr := voidPayment(ctx, authID); voidErr != nil {
 					logger.Error("error voiding payment for failed order",
-						"order id", i.OrderID,
+						"order_id", i.OrderID,
 						"error", voidErr,
 					)
 				}
@@ -328,9 +353,9 @@ func handleAuthorizationFailure(
 			Status: ptr.To(order.StatusFailed),
 		})
 		logger.Error("payment authorization failed",
-			"type", appErr.Type(),
+			"error_type", appErr.Type(),
 			"error", err,
-			"order updated to failed", updateErr == nil,
+			"order_marked_failed", updateErr == nil,
 		)
 	}
 	return fmt.Errorf("payment authorization failed: %w", err)

@@ -19,8 +19,9 @@ import (
 
 // setupOrderRepo returns an order repository wired to a throwaway Postgres, plus
 // the client behind it so tests can seed the prescription and offer rows that
-// orders foreign-key to. Orders have no unique constraints, so one container is
-// safely shared across the subtests.
+// orders foreign-key to. The partial unique index on offer_id allows only one
+// active (non-failed/canceled) order per offer, so each subtest that persists an
+// order seeds its own offer; with that, one container is safely shared.
 func setupOrderRepo(t *testing.T) (*postgres.OrderRepository, *ent.Client) {
 	t.Helper()
 
@@ -50,15 +51,17 @@ func TestOrderRepository(t *testing.T) {
 	repo, client := setupOrderRepo(t)
 	ctx := context.Background()
 
-	// FK parents, seeded once and shared: orders have no unique constraints, so
-	// subtests cannot collide through them.
+	// FK parents, seeded once and shared. Offers are the exception: the partial
+	// unique index allows one active order per offer, so subtests that persist an
+	// order seed their own.
 	userID := seedUser(t, client)
 	rxID := seedPrescription(t, client, userID)
 	pharmID := seedPharmacy(t, client)
 	offerID := seedOffer(t, client, rxID, pharmID)
 
 	t.Run("Create assigns an ID and round-trips via GetByID", func(t *testing.T) {
-		created, err := repo.Create(ctx, newDomainOrder(t, rxID, offerID))
+		ownOfferID := seedOffer(t, client, rxID, pharmID)
+		created, err := repo.Create(ctx, newDomainOrder(t, rxID, ownOfferID))
 		require.NoError(t, err)
 		assert.NotEqual(t, uuid.Nil, created.ID, "Create should surface the DB-assigned ID")
 		assert.Equal(t, order.StatusPlaced, created.Status, "a new order starts placed")
@@ -67,7 +70,7 @@ func TestOrderRepository(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, created.ID, got.ID)
 		assert.Equal(t, rxID, got.PrescriptionID)
-		assert.Equal(t, offerID, got.OfferID)
+		assert.Equal(t, ownOfferID, got.OfferID)
 		assert.Equal(t, order.StatusPlaced, got.Status)
 		assert.Equal(t, 30, got.Qty)
 	})
@@ -76,7 +79,7 @@ func TestOrderRepository(t *testing.T) {
 	// must survive the trip back as a nil *Money rather than a pointer to $0.00 —
 	// the distinction the whole nullable design exists for.
 	t.Run("a new order reads back unpaid, not paid-zero", func(t *testing.T) {
-		created, err := repo.Create(ctx, newDomainOrder(t, rxID, offerID))
+		created, err := repo.Create(ctx, newDomainOrder(t, rxID, seedOffer(t, client, rxID, pharmID)))
 		require.NoError(t, err)
 		assert.Nil(t, created.PricePaid, "nothing is paid at placed")
 
@@ -89,7 +92,7 @@ func TestOrderRepository(t *testing.T) {
 	// and returned its handles, but capture has not happened. PricePaid is still nil
 	// here, so Update must not assume otherwise.
 	t.Run("Update persists pharmacy handles while still unpaid", func(t *testing.T) {
-		created, err := repo.Create(ctx, newDomainOrder(t, rxID, offerID))
+		created, err := repo.Create(ctx, newDomainOrder(t, rxID, seedOffer(t, client, rxID, pharmID)))
 		require.NoError(t, err)
 
 		created.Status = order.StatusConfirmed
@@ -110,7 +113,7 @@ func TestOrderRepository(t *testing.T) {
 	})
 
 	t.Run("Update records a captured price", func(t *testing.T) {
-		created, err := repo.Create(ctx, newDomainOrder(t, rxID, offerID))
+		created, err := repo.Create(ctx, newDomainOrder(t, rxID, seedOffer(t, client, rxID, pharmID)))
 		require.NoError(t, err)
 
 		paid, err := shared.NewMoneyFromCents(38970)
@@ -131,7 +134,7 @@ func TestOrderRepository(t *testing.T) {
 	// from having paid nothing at all. This is the case that collapses if PricePaid
 	// is ever built as &someValue rather than left nil.
 	t.Run("a captured $0.00 is distinguishable from unpaid", func(t *testing.T) {
-		created, err := repo.Create(ctx, newDomainOrder(t, rxID, offerID))
+		created, err := repo.Create(ctx, newDomainOrder(t, rxID, seedOffer(t, client, rxID, pharmID)))
 		require.NoError(t, err)
 		require.Nil(t, created.PricePaid)
 
@@ -167,7 +170,7 @@ func TestOrderRepository(t *testing.T) {
 	// longer takes a status: the saga advances orders by assigning the field, so a
 	// typo there reaches the database.
 	t.Run("the status CHECK rejects a value outside the enum", func(t *testing.T) {
-		created, err := repo.Create(ctx, newDomainOrder(t, rxID, offerID))
+		created, err := repo.Create(ctx, newDomainOrder(t, rxID, seedOffer(t, client, rxID, pharmID)))
 		require.NoError(t, err)
 
 		created.Status = "shipped_typo"
@@ -187,5 +190,26 @@ func TestOrderRepository(t *testing.T) {
 		created, err := repo.Create(ctx, newDomainOrder(t, rxID, uuid.New()))
 		require.Error(t, err)
 		assert.Nil(t, created)
+	})
+
+	// The partial unique index allows one ACTIVE order per offer: a second Create
+	// against the same offer maps to ErrOrderExists, but once the first order is
+	// terminal-non-success (failed/canceled) the offer is re-orderable.
+	t.Run("a second active order for the same offer maps to ErrOrderExists", func(t *testing.T) {
+		ownOfferID := seedOffer(t, client, rxID, pharmID)
+		first, err := repo.Create(ctx, newDomainOrder(t, rxID, ownOfferID))
+		require.NoError(t, err)
+
+		dup, err := repo.Create(ctx, newDomainOrder(t, rxID, ownOfferID))
+		require.ErrorIs(t, err, outbound.ErrOrderExists)
+		assert.Nil(t, dup)
+
+		first.Status = order.StatusFailed
+		_, err = repo.Update(ctx, first)
+		require.NoError(t, err)
+
+		retry, err := repo.Create(ctx, newDomainOrder(t, rxID, ownOfferID))
+		require.NoError(t, err, "a failed order must not block re-ordering the offer")
+		assert.NotNil(t, retry)
 	})
 }

@@ -61,6 +61,7 @@ services:
       - WEBHOOK_BASE_URL=http://backend:8080
       # OTLP sink (the collector); host:port for otlptracegrpc's WithEndpoint.
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - LOG_LEVEL=debug
     labels:
       - "traefik.enable=true"
       # PathPrefix(/api) is longer than the frontend's PathPrefix(/), so Traefik
@@ -108,6 +109,7 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       # OTLP sink (the collector); host:port for otlptracegrpc's WithEndpoint.
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - LOG_LEVEL=debug
     depends_on:
       postgres:
         condition: service_healthy

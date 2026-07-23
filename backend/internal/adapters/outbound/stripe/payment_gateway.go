@@ -70,6 +70,12 @@ func (g *PaymentGateway) Authorize(ctx context.Context, i outbound.AuthorizeInpu
 		}
 		return outbound.AuthorizeResult{}, fmt.Errorf("error authorizing payment: %w", err)
 	}
+	g.logger.InfoContext(ctx,
+		"payment authorized",
+		"order_id", i.OrderID,
+		"payment_intent_id", pi.ID,
+		"amount_cents", pi.Amount,
+	)
 	return outbound.AuthorizeResult{
 		AuthorizationID: pi.ID,
 	}, nil
@@ -97,6 +103,11 @@ func (g *PaymentGateway) Capture(
 		}
 		return outbound.CaptureResult{}, fmt.Errorf("error capturing payment: %w", err)
 	}
+	g.logger.InfoContext(ctx,
+		"payment captured",
+		"auth_id", authID,
+		"amount_cents", pi.Amount,
+	)
 	return outbound.CaptureResult{
 		AuthorizationID: pi.ID,
 	}, nil
@@ -110,5 +121,9 @@ func (g *PaymentGateway) Void(ctx context.Context, authID string) error {
 	if err != nil {
 		return fmt.Errorf("error voiding payment: %w", err)
 	}
+	g.logger.InfoContext(ctx,
+		"payment canceled",
+		"auth_id", authID,
+	)
 	return nil
 }

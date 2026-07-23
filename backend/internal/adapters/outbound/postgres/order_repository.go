@@ -61,9 +61,9 @@ func (r *OrderRepository) Create(ctx context.Context, o *order.Order) (*order.Or
 	r.logger.DebugContext(
 		ctx,
 		"new order record created",
-		"prescription id",
+		"prescription_id",
 		newOrderRecord.PrescriptionID,
-		"new record id",
+		"order_id",
 		newOrderRecord.ID,
 	)
 	return mapToDomainOrder(newOrderRecord)
@@ -88,7 +88,7 @@ func (r *OrderRepository) Update(ctx context.Context, o *order.Order) (*order.Or
 	r.logger.DebugContext(
 		ctx,
 		"order record updated",
-		"record id",
+		"order_id",
 		updatedRecord.ID,
 	)
 	return mapToDomainOrder(updatedRecord)

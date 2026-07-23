@@ -97,6 +97,6 @@ func (c *Client) RegisterWebhook(ctx context.Context, trackingID, callbackURL st
 		return respError
 	}
 
-	c.logger.DebugContext(ctx, "webhook successfully registered", "tracking id", trackingID)
+	c.logger.DebugContext(ctx, "webhook registered", "tracking_id", trackingID)
 	return nil
 }

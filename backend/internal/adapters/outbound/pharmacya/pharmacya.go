@@ -249,9 +249,9 @@ func (pa *PharmacyA) PlaceOrder(
 		// time
 		pa.logger.ErrorContext(
 			ctx,
-			"error with total returned from order",
-			"total", orderResp.TotalCents,
-			"order id", orderResp.OrderID,
+			"invalid total in order response",
+			"total_cents", orderResp.TotalCents,
+			"pharmacy_order_id", orderResp.OrderID,
 		)
 	}
 	result, err := pharmacy.NewOrderResult(pharmacy.NewOrderResultParams{

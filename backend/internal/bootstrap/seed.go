@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
@@ -64,8 +65,8 @@ var pharmacySeeds = []pharmacySeed{
 
 // SeedPharmacies idempotently ensures every required pharmacy row exists. It is
 // safe to call from every binary at startup: existing rows are skipped, missing
-// ones are created, and any other repo error fails loudly.
-func SeedPharmacies(ctx context.Context, repo outbound.PharmacyRepository) error {
+// ones are created (and logged), and any other repo error fails loudly.
+func SeedPharmacies(ctx context.Context, logger *slog.Logger, repo outbound.PharmacyRepository) error {
 	for _, seed := range pharmacySeeds {
 		_, err := repo.GetByCode(ctx, seed.code)
 		switch {
@@ -108,6 +109,7 @@ func SeedPharmacies(ctx context.Context, repo outbound.PharmacyRepository) error
 			if err != nil {
 				return fmt.Errorf("error creating pharmacy with code %q: %w", seed.code, err)
 			}
+			logger.InfoContext(ctx, "pharmacy seeded", "pharmacy_code", seed.code)
 		default:
 			// other errors are real db errors
 			return fmt.Errorf("error checking db with pharmacy code %q: %w", seed.code, err)

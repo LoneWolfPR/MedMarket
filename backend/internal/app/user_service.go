@@ -108,13 +108,17 @@ func (s *UserService) Register(ctx context.Context, input inbound.RegisterInput)
 // Login takes a provided email and password, fetches a profile by email, and validates the
 // password that is provided against the hash returned
 func (s *UserService) Login(ctx context.Context, email, password string) (string, error) {
+	// Failed attempts log a stable security event with the failure reason. The
+	// email is deliberately never an attr (PII); user_id appears once known.
 	userEmail, err := shared.NewEmail(email)
 	if err != nil {
+		s.logger.WarnContext(ctx, "login failed", "reason", "malformed_email")
 		return "", inbound.ErrInvalidCredentials
 	}
 	userProfile, err := s.userRepository.GetByEmail(ctx, userEmail)
 	if err != nil {
 		if errors.Is(err, outbound.ErrUserNotFound) {
+			s.logger.WarnContext(ctx, "login failed", "reason", "unknown_email")
 			return "", inbound.ErrInvalidCredentials
 		}
 		return "", fmt.Errorf("error fetching profile by email: %w", err)
@@ -122,6 +126,7 @@ func (s *UserService) Login(ctx context.Context, email, password string) (string
 
 	err = s.passwordHasher.Compare(userProfile.PasswordHash.String(), password)
 	if err != nil {
+		s.logger.WarnContext(ctx, "login failed", "reason", "invalid_password", "user_id", userProfile.ID)
 		return "", inbound.ErrInvalidCredentials
 	}
 

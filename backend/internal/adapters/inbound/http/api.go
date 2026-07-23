@@ -66,10 +66,10 @@ func NewAPI(p NewAPIParams, mux openapi.ServeMux) http.Handler {
 		},
 		ResponseErrorHandlerFunc: func(
 			w http.ResponseWriter,
-			_ *http.Request,
+			r *http.Request,
 			err error,
 		) {
-			p.Logger.Error("unexpected handler error", "error", err)
+			p.Logger.ErrorContext(r.Context(), "unexpected handler error", "error", err)
 			writeJSONError(w, http.StatusInternalServerError, msgInternalServerError)
 		},
 	}

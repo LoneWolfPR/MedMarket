@@ -110,13 +110,13 @@ func (s *PriceSearchService) GetQuoteList(
 	for _, result := range quoteResults {
 		currPharm, ok := pharmList[result.PharmacyID()]
 		if !ok {
-			s.logger.ErrorContext(ctx, "pharmacy not found for that id", "pharmacy id", result.PharmacyID())
+			s.logger.ErrorContext(ctx, "pharmacy not found", "pharmacy_id", result.PharmacyID())
 			continue
 		}
 		totalCents := result.Price().Cents() * int64(rx.Qty)
 		total, err := shared.NewMoneyFromCents(totalCents)
 		if err != nil {
-			s.logger.ErrorContext(ctx, "error with total cents", "total cents", totalCents, "error", err)
+			s.logger.WarnContext(ctx, "error computing quote total", "total_cents", totalCents, "error", err)
 			continue
 		}
 		newQuoteView := inbound.QuoteView{
@@ -132,22 +132,24 @@ func (s *PriceSearchService) GetQuoteList(
 		})
 		if err != nil {
 			// log the error and skip this quote if we can't store an offer
-			s.logger.ErrorContext(
+			s.logger.WarnContext(
 				ctx,
 				"error creating offer",
-				"prescription id", rxID,
-				"quote", result,
+				"prescription_id", rxID,
+				"pharmacy_id", result.PharmacyID(),
+				"price_cents", result.Price().Cents(),
 				"error", err)
 			continue
 		}
 		newOffer, err = s.offerRepo.Create(ctx, newOffer)
 		if err != nil {
 			// log the error and skip this quote if we can't store an offer
-			s.logger.ErrorContext(
+			s.logger.WarnContext(
 				ctx,
 				"error writing offer to db",
-				"prescription id", rxID,
-				"quote", result,
+				"prescription_id", rxID,
+				"pharmacy_id", result.PharmacyID(),
+				"price_cents", result.Price().Cents(),
 				"error", err)
 			continue
 		}
