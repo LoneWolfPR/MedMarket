@@ -52,8 +52,13 @@ jobs:
           docker build -t "$REGISTRY/mock-pharmacy-a:$SHA" ./services/mock-pharmacy-a
           docker build -t "$REGISTRY/mock-pharmacy-b:$SHA" ./services/mock-pharmacy-b
           docker build -t "$REGISTRY/mock-shipping:$SHA"   ./services/mock-shipping
+          # Push the immutable :SHA (what this deploy pins) and a moving :latest
+          # (so a manual `task cluster-up` / `kubectl apply -k` can pull a valid
+          # image — the committed overlay references :latest).
           for img in backend worker migrate frontend mock-pharmacy-a mock-pharmacy-b mock-shipping; do
+            docker tag "$REGISTRY/$img:$SHA" "$REGISTRY/$img:latest"
             docker push "$REGISTRY/$img:$SHA"
+            docker push "$REGISTRY/$img:latest"
           done
 
       - name: Install kustomize
