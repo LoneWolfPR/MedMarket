@@ -1,0 +1,8 @@
+# Binds the collector KSA to its GSA so the googlecloud exporter can write to
+# Cloud Trace + Cloud Logging keyless via Workload Identity.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: medmarket-collector
+  annotations:
+    iam.gke.io/gcp-service-account: medmarket-collector@project-8628faf2-7f2e-46d0-a01.iam.gserviceaccount.com

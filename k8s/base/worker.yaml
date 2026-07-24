@@ -1,0 +1,46 @@
+# Temporal worker — a second binary from the same Dockerfile (CMD=worker),
+# published as its own image. Polls Temporal for workflow/activity tasks; has no
+# inbound ports, so no Service. Does NOT use FileStorage, so it needs no GCS
+# service account — it runs as the namespace default ServiceAccount.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: medmarket-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: medmarket-worker
+  template:
+    metadata:
+      labels:
+        app: medmarket-worker
+    spec:
+      # Same migration gate as the backend (idempotent + advisory-locked, so the
+      # two racing is safe) — the worker also touches the schema at startup.
+      initContainers:
+        - name: migrate
+          image: medmarket-migrate
+          command:
+            ["atlas", "migrate", "apply", "--dir", "file:///migrations", "--url", "$(DATABASE_URL)"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: medmarket-secrets
+                  key: DATABASE_URL
+      containers:
+        - name: worker
+          image: medmarket-worker
+          envFrom:
+            - configMapRef:
+                name: medmarket-config
+            - secretRef:
+                name: medmarket-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

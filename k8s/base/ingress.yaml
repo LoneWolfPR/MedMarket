@@ -1,0 +1,30 @@
+# The single public entry point. GKE provisions a global external L7 load
+# balancer from this and routes by path: /api → backend, everything else →
+# frontend. This replaces Traefik (local-dev only); the mocks, dashboards, and
+# the shipping webhook receiver are NOT here — they're in-cluster only.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: medmarket
+spec:
+  ingressClassName: gce          # GKE's external HTTP(S) load balancer
+  rules:
+    - http:
+        paths:
+          # More specific first. /api and /api/* → backend. GCE matches by
+          # longest prefix, so this wins over "/" for API traffic.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: medmarket-backend
+                port:
+                  number: 8080
+          # Everything else → the SPA (nginx serves index.html + assets).
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: medmarket-frontend
+                port:
+                  number: 80

@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# STUB — proves the structure supports multiple environments; staging is the
+# working target. Before production could actually be applied it needs, mirroring
+# the staging overlay:
+#   - its own GSAs + Workload Identity bindings in terraform (storage.tf +
+#     observability.tf currently bind ONLY the staging namespace)
+#   - SA-annotation patches pointing at those production GSAs
+#   - an images: block (likely pinned to release tags, not `latest`)
+#   - a secretGenerator from a production .env
+#   - a config-gcs-patch for the production bucket
+# Intentionally omitted here — this is a placeholder, not a deployable overlay.
+
+namespace: production
+
+resources:
+  - ../../base
+  - namespace.yaml

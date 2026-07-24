@@ -1,0 +1,55 @@
+# Temporal server (auto-setup image): runs schema setup + creates the default
+# namespace on first boot, then serves gRPC on 7233. Backed by temporal-db.
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+spec:
+  selector:
+    app: temporal
+  ports:
+    - port: 7233
+      targetPort: 7233
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal
+  template:
+    metadata:
+      labels:
+        app: temporal
+    spec:
+      containers:
+        - name: temporal
+          image: temporalio/auto-setup:1.29.7
+          ports:
+            - containerPort: 7233
+          env:
+            - name: DB               # driver name; postgres12 is PG17-compatible
+              value: postgres12
+            - name: DB_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: temporal
+            - name: POSTGRES_PWD
+              value: temporal
+            - name: POSTGRES_SEEDS    # the temporal-db Service name
+              value: temporal-db
+          readinessProbe:
+            tcpSocket:
+              port: 7233
+            initialDelaySeconds: 15   # schema setup runs before the port opens
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

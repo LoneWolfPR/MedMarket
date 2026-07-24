@@ -1,0 +1,10 @@
+# Env-specific storage config merged into medmarket-config: the staging GCS
+# bucket and the storage SA email the backend signs presigned URLs as. These
+# name a specific GCP project, so they belong to the overlay, not base.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: medmarket-config
+data:
+  GCS_BUCKET: project-8628faf2-7f2e-46d0-a01-prescriptions
+  GCS_SERVICE_ACCOUNT_EMAIL: medmarket-storage@project-8628faf2-7f2e-46d0-a01.iam.gserviceaccount.com

@@ -1,0 +1,47 @@
+# Frontend — the production build (Dockerfile.prod): Vite output served by nginx
+# on port 80 with SPA fallback. The Ingress routes "/" here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: medmarket-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: medmarket-frontend
+  template:
+    metadata:
+      labels:
+        app: medmarket-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: medmarket-frontend
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: medmarket-frontend
+spec:
+  selector:
+    app: medmarket-frontend
+  ports:
+    - port: 80
+      targetPort: 80

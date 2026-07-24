@@ -1,0 +1,33 @@
+# Non-secret configuration shared by the backend and worker (both envFrom this).
+# Every value here is environment-AGNOSTIC: in-cluster Service DNS names resolve
+# the same in any namespace, so staging and production share them unchanged.
+#
+# Environment-SPECIFIC values (GCS_BUCKET, GCS_SERVICE_ACCOUNT_EMAIL, and any
+# LOG_LEVEL override) are added by each overlay — they name a specific GCP
+# project, which is not a base concern.
+#
+# Secret values (DATABASE_URL, JWT_SECRET, STRIPE_SECRET_KEY, PHARMACY_*_SECRET,
+# POSTGRES_PASSWORD) come from the Secret, generated per-overlay from a
+# gitignored .env — never here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: medmarket-config
+data:
+  # Storage: cloud environments use the keyless GCS adapter.
+  FILE_STORAGE_BACKEND: gcs
+  # In-cluster service addresses (Service names on the cluster network).
+  PHARMACY_A_BASE_URL: http://mock-pharmacy-a:8080
+  PHARMACY_B_BASE_URL: http://mock-pharmacy-b:8080
+  SHIPPING_BASE_URL: http://mock-shipping:8080
+  TEMPORAL_HOSTPORT: temporal:7233
+  WEBHOOK_BASE_URL: http://medmarket-backend:8080
+  OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+  SMTP_HOST: mailpit
+  SMTP_PORT: "1025"
+  SMTP_FROM: no-reply@medmarket.local
+  # Application knobs.
+  PORT: "8080"
+  JWT_TTL: 24h
+  OFFER_TTL: 15m
+  LOG_LEVEL: info

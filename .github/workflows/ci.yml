@@ -1,0 +1,61 @@
+name: CI
+
+# Deterministic gates for pull requests → the "required status checks" that pair
+# with branch protection + Claude review. Deliberately credential-free: no GCP,
+# no cluster, no secrets. Only the post-merge deploy touches the cloud.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...                 # unit tests only (Docker-free)
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: backend
+          args: --build-tags=integration,smoke
+
+  kustomize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kustomize
+        run: |
+          curl -sfL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+      - name: Render base
+        run: kustomize build k8s/base > /dev/null
+      - name: Render staging overlay
+        # secretGenerator needs a .env to exist; the example values are enough to
+        # prove the overlay renders. Nothing here reaches a cluster.
+        run: |
+          cp k8s/overlays/staging/.env.example k8s/overlays/staging/.env
+          kustomize build k8s/overlays/staging > /dev/null
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      # -backend=false skips GCS backend auth — validate is offline/credential-free.
+      - run: terraform init -backend=false
+      - run: terraform validate
