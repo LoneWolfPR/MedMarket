@@ -1,7 +1,7 @@
 # Migration runner: the Atlas CLI plus the versioned migrations directory, run as
-# an initContainer before the backend/worker start. Keep the Atlas version in
-# step with the one used locally (`atlas version`) so the atlas.sum integrity
-# check matches. Build context is ./backend.
-FROM arigaio/atlas:0.36.1
+# an initContainer before the backend/worker start. Pinned to the latest
+# published image tag on the same 1.2.x line as local (`atlas version`) so the
+# atlas.sum integrity check matches. Build context is ./backend.
+FROM arigaio/atlas:1.2.3
 
 COPY ent/migrate/migrations /migrations
