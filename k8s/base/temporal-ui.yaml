@@ -33,6 +33,11 @@ spec:
           env:
             - name: TEMPORAL_ADDRESS
               value: temporal:7233
+            # Set explicitly to override the Kubernetes-injected TEMPORAL_UI_PORT
+            # (=tcp://<ip>:8080, from the Service of the same name), which the UI
+            # otherwise reads as its listen port and fails to parse as an int.
+            - name: TEMPORAL_UI_PORT
+              value: "8080"
           resources:
             requests:
               cpu: 50m
