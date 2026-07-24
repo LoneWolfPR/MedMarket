@@ -15,6 +15,7 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/ent"
 	httpapi "github.com/LoneWolfPR/MedMarket/backend/internal/adapters/inbound/http"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/bcrypt"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/gcs"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/jwt"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/postgres"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/s3"
@@ -22,8 +23,10 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/internal/app"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/bootstrap"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/envkeys"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/telemetry"
 
+	"cloud.google.com/go/storage"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
@@ -32,6 +35,7 @@ import (
 	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
 	temporallog "go.temporal.io/sdk/log"
+	"google.golang.org/api/iamcredentials/v1"
 )
 
 const presignTTL = 15 * time.Minute
@@ -382,32 +386,55 @@ func buildHandler(p buildHandlerParams) (http.Handler, error) {
 	return handlerWithOtel, nil
 }
 
-// newFileStorage builds the S3/MinIO-backed file storage adapter. It uses two
-// clients: an internal one for uploads and a public-endpoint one for presigned
-// URLs the browser can reach (see the split-horizon note in the s3 package).
-func newFileStorage(cfg config, logger *slog.Logger) (*s3.S3, error) {
-	minioClient, err := minio.New(cfg.MinioEndpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.MinioAccessKey, cfg.MinioSecretKey, ""),
-		Secure: cfg.MinioUseSSL,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error setting up minio client: %w", err)
+// newFileStorage builds the FileStorage adapter selected by
+// cfg.FileStorageBackend: "minio" (local dev — two clients for the
+// upload/presign split-horizon) or "gcs" (prod — keyless signing via
+// Workload Identity + IAM signBlob). Any other value is an error.
+func newFileStorage(cfg config, logger *slog.Logger) (outbound.FileStorage, error) {
+	switch cfg.FileStorageBackend {
+	case "minio":
+		minioClient, err := minio.New(cfg.MinioEndpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(cfg.MinioAccessKey, cfg.MinioSecretKey, ""),
+			Secure: cfg.MinioUseSSL,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error setting up minio client: %w", err)
+		}
+		minioPublicClient, err := minio.New(cfg.MinioPublicEndpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(cfg.MinioAccessKey, cfg.MinioSecretKey, ""),
+			Region: cfg.MinioRegion,
+			Secure: false,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error setting up public minio client: %w", err)
+		}
+		return s3.NewS3(s3.NewS3Params{
+			Client:        minioClient,
+			PresignClient: minioPublicClient,
+			Bucket:        cfg.MinioBucket,
+			PresignTTL:    presignTTL,
+			Logger:        logger,
+		})
+	case "gcs":
+		gcsClient, err := storage.NewClient(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("error setting up gcs client: %w", err)
+		}
+		signingClient, err := iamcredentials.NewService(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("error setting up gcs signing client: %w", err)
+		}
+		return gcs.NewGCS(gcs.NewGCSParams{
+			Client:         gcsClient,
+			SigningClient:  signingClient,
+			Bucket:         cfg.GCSBucket,
+			GoogleAccessID: cfg.GCSServiceAccountEmail,
+			PresignTTL:     presignTTL,
+			Logger:         logger,
+		})
+	default:
+		return nil, fmt.Errorf("unknown file storage backend: %q", cfg.FileStorageBackend)
 	}
-	minioPublicClient, err := minio.New(cfg.MinioPublicEndpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.MinioAccessKey, cfg.MinioSecretKey, ""),
-		Region: cfg.MinioRegion,
-		Secure: false,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error setting up public minio client: %w", err)
-	}
-	return s3.NewS3(s3.NewS3Params{
-		Client:        minioClient,
-		PresignClient: minioPublicClient,
-		Bucket:        cfg.MinioBucket,
-		PresignTTL:    presignTTL,
-		Logger:        logger,
-	})
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
