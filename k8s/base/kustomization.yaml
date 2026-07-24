@@ -1,0 +1,27 @@
+# The base: every environment-agnostic resource, listed as one unit. Overlays
+# reference this directory and layer on namespace, images, secrets, and the
+# Workload Identity annotations. Never applied directly — always via an overlay.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Application workloads
+  - backend.yaml
+  - worker.yaml
+  - frontend.yaml
+  # Mock external services (still mocks in prod — no real vendors)
+  - mocks.yaml
+  # Mail sink
+  - mailpit.yaml
+  # Data tier (StatefulSets + their headless Services)
+  - postgres.yaml
+  - temporal-db.yaml
+  # Temporal cluster
+  - temporal.yaml
+  - temporal-ui.yaml
+  # Observability
+  - collector.yaml
+  # Shared non-secret config
+  - configmap.yaml
+  # Public entry point
+  - ingress.yaml

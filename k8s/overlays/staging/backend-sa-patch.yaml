@@ -1,0 +1,9 @@
+# Binds the backend KSA to the storage GSA (Workload Identity). This is the
+# annotation that makes the pod's ADC resolve to medmarket-storage, giving it
+# keyless GCS Put + signBlob presigning. Env-specific → lives in the overlay.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: medmarket-backend
+  annotations:
+    iam.gke.io/gcp-service-account: medmarket-storage@project-8628faf2-7f2e-46d0-a01.iam.gserviceaccount.com

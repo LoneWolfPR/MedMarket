@@ -1,0 +1,50 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Everything lands in the staging namespace (which the WI bindings target).
+namespace: staging
+
+resources:
+  - ../../base
+  - namespace.yaml
+
+# Rewrite the base's placeholder image names to Artifact Registry paths. Only the
+# images we build are rewritten; public infra images (postgres, temporal, etc.)
+# pass through unchanged. CI pins newTag to the built commit via
+# `kustomize edit set image`; `latest` is the manual fallback.
+images:
+  - name: medmarket-backend
+    newName: us-central1-docker.pkg.dev/project-8628faf2-7f2e-46d0-a01/medmarket/backend
+    newTag: latest
+  - name: medmarket-worker
+    newName: us-central1-docker.pkg.dev/project-8628faf2-7f2e-46d0-a01/medmarket/worker
+    newTag: latest
+  - name: medmarket-migrate
+    newName: us-central1-docker.pkg.dev/project-8628faf2-7f2e-46d0-a01/medmarket/migrate
+    newTag: latest
+  - name: medmarket-frontend
+    newName: us-central1-docker.pkg.dev/project-8628faf2-7f2e-46d0-a01/medmarket/frontend
+    newTag: latest
+  - name: medmarket-mock-pharmacy-a
+    newName: us-central1-docker.pkg.dev/project-8628faf2-7f2e-46d0-a01/medmarket/mock-pharmacy-a
+    newTag: latest
+  - name: medmarket-mock-pharmacy-b
+    newName: us-central1-docker.pkg.dev/project-8628faf2-7f2e-46d0-a01/medmarket/mock-pharmacy-b
+    newTag: latest
+  - name: medmarket-mock-shipping
+    newName: us-central1-docker.pkg.dev/project-8628faf2-7f2e-46d0-a01/medmarket/mock-shipping
+    newTag: latest
+
+# Materialize the Secret from the gitignored .env. Kustomize hash-suffixes the
+# name and rewrites every secretRef/secretKeyRef to match, so a changed secret
+# rolls the pods automatically.
+secretGenerator:
+  - name: medmarket-secrets
+    envs:
+      - .env
+
+# Layer the environment-specific edits onto base resources.
+patches:
+  - path: backend-sa-patch.yaml       # WI annotation → storage GSA
+  - path: collector-sa-patch.yaml     # WI annotation → collector GSA
+  - path: config-gcs-patch.yaml       # GCS bucket + SA email into the ConfigMap

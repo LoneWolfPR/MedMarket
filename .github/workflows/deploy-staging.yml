@@ -1,0 +1,107 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# id-token: write is REQUIRED for Workload Identity Federation — it lets the job
+# request a GitHub OIDC token to exchange for GCP credentials. contents: read is
+# the default minimum for checkout.
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: project-8628faf2-7f2e-46d0-a01
+  REGION: us-central1
+  REGISTRY: us-central1-docker.pkg.dev/project-8628faf2-7f2e-46d0-a01/medmarket
+  CLUSTER: medmarket
+  CLUSTER_ZONE: us-central1-a
+  SHA: ${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exchange the GitHub OIDC token for short-lived GCP creds (no key). The
+      # two values come from `terraform output` — set them as repo Variables:
+      #   WIF_PROVIDER       = ci_workload_identity_provider
+      #   CI_SERVICE_ACCOUNT = ci_service_account_email
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CI_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # backend + worker are the same Dockerfile with a different CMD build-arg;
+      # frontend is the nginx prod build; the three mocks each own a Dockerfile.
+      - name: Build and push images
+        run: |
+          docker build -t "$REGISTRY/backend:$SHA"         --build-arg CMD=server ./backend
+          docker build -t "$REGISTRY/worker:$SHA"          --build-arg CMD=worker ./backend
+          docker build -t "$REGISTRY/migrate:$SHA"         -f ./backend/Dockerfile.migrate ./backend
+          docker build -t "$REGISTRY/frontend:$SHA"        -f ./frontend/Dockerfile.prod ./frontend
+          docker build -t "$REGISTRY/mock-pharmacy-a:$SHA" ./services/mock-pharmacy-a
+          docker build -t "$REGISTRY/mock-pharmacy-b:$SHA" ./services/mock-pharmacy-b
+          docker build -t "$REGISTRY/mock-shipping:$SHA"   ./services/mock-shipping
+          # Push the immutable :SHA (what this deploy pins) and a moving :latest
+          # (so a manual `task cluster-up` / `kubectl apply -k` can pull a valid
+          # image — the committed overlay references :latest).
+          for img in backend worker migrate frontend mock-pharmacy-a mock-pharmacy-b mock-shipping; do
+            docker tag "$REGISTRY/$img:$SHA" "$REGISTRY/$img:latest"
+            docker push "$REGISTRY/$img:$SHA"
+            docker push "$REGISTRY/$img:latest"
+          done
+
+      - name: Install kustomize
+        run: |
+          curl -sfL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.CLUSTER }}
+          location: ${{ env.CLUSTER_ZONE }}
+
+      # Reconstruct the gitignored .env from GitHub Secrets so the staging
+      # secretGenerator has its inputs. The runner is ephemeral — this file is
+      # gone when the job ends.
+      - name: Write staging .env from secrets
+        run: |
+          cat > k8s/overlays/staging/.env <<EOF
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+          PHARMACY_A_SECRET=${{ secrets.PHARMACY_A_SECRET }}
+          PHARMACY_B_SECRET=${{ secrets.PHARMACY_B_SECRET }}
+          EOF
+
+      # Pin the placeholder image names to the immutable commit SHA (not :latest)
+      # so the deploy is traceable and rollbackable, then apply.
+      - name: Set image tags and apply
+        run: |
+          cd k8s/overlays/staging
+          kustomize edit set image \
+            "medmarket-backend=$REGISTRY/backend:$SHA" \
+            "medmarket-worker=$REGISTRY/worker:$SHA" \
+            "medmarket-migrate=$REGISTRY/migrate:$SHA" \
+            "medmarket-frontend=$REGISTRY/frontend:$SHA" \
+            "medmarket-mock-pharmacy-a=$REGISTRY/mock-pharmacy-a:$SHA" \
+            "medmarket-mock-pharmacy-b=$REGISTRY/mock-pharmacy-b:$SHA" \
+            "medmarket-mock-shipping=$REGISTRY/mock-shipping:$SHA"
+          cd -
+          kubectl apply -k k8s/overlays/staging
+
+      # Cold-cluster deploys scale nodes up from 0, so allow generous time.
+      - name: Wait for backend rollout
+        run: kubectl rollout status deployment/medmarket-backend -n staging --timeout=600s

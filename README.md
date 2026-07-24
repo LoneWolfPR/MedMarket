@@ -20,6 +20,7 @@ external services, workflow definitions, and deployment configuration.
 - [Tech Stack](#tech-stack)
 - [Repository Structure](#repository-structure)
 - [Local Development](#local-development)
+- [Deployment](#deployment)
 
 ## Overview
 
@@ -84,9 +85,9 @@ MedMarket lets a user:
 ├── services/       Mock external services (pharmacy A/B, shipping) — Node/Express
 ├── workflows/      Temporal workflow & activity definitions — placeholder
 ├── worker/         Temporal worker process — placeholder
-├── k8s/            Kubernetes manifests (base + overlays) — placeholder
-├── terraform/      Infrastructure as code for GKE — placeholder
-├── .github/        CI/CD workflows — placeholder
+├── k8s/            Kubernetes manifests (Kustomize base + staging/production overlays)
+├── terraform/      Infrastructure as code (GKE, Artifact Registry, GCS, Workload Identity)
+├── .github/        CI/CD workflows (PR checks + deploy on merge to main)
 ├── docker-compose.yml   Full local stack (Traefik, backend, frontend, Postgres, mock services)
 ├── go.work         Go workspace tying the Go modules together
 ├── Taskfile.yml    Task runner entry point (see `task --list`)
@@ -157,3 +158,68 @@ end-to-end and has prerequisites:
 - It registers a throwaway user (unique email) each run, so it is safe to
   re-run and leaves no fixtures to clean up.
 - Override the target with `SMOKE_BASE_URL` (defaults to `http://localhost`).
+
+## Deployment
+
+The application deploys to **Google Kubernetes Engine**. Infrastructure is
+managed with Terraform (`terraform/`) and workloads with Kustomize (`k8s/`). A
+step-by-step first-bring-up runbook lives in [`docs/deploy.md`](./docs/deploy.md);
+this section is the model.
+
+### Architecture
+
+- **Keyless auth via Workload Identity.** No service-account keys exist anywhere
+  (the org policy forbids them). In-cluster, pods impersonate Google service
+  accounts through Workload Identity — the backend signs GCS presigned URLs via
+  IAM `signBlob`, and the OpenTelemetry Collector writes to Cloud Trace / Cloud
+  Logging — all without a key file. CI authenticates the same way, exchanging a
+  GitHub OIDC token for short-lived GCP credentials (Workload Identity
+  Federation).
+- **Kustomize base + overlays.** `k8s/base/` holds every environment-agnostic
+  resource; `k8s/overlays/staging/` layers on the namespace, Artifact Registry
+  image names, the Workload Identity annotations, and the generated Secret.
+  `k8s/overlays/production/` is a stub that proves the structure scales to a
+  second environment (staging is the working target).
+- **Self-hosted infra.** Postgres and Temporal's database run as StatefulSets
+  with persistent disks; Temporal, the mock services, and Mailpit run in-cluster.
+  Prescription files go to **GCS** (the keyless adapter replaces local MinIO);
+  traces/logs go to **Cloud Trace / Cloud Logging** (replacing local Jaeger).
+- **Ingress.** A single GKE HTTP load balancer routes `/api` to the backend and
+  everything else to the frontend, replacing Traefik (which is local-dev only).
+
+### Secrets
+
+Secrets never enter git. The staging Kustomize overlay's `secretGenerator` reads
+a gitignored `.env` (template: `k8s/overlays/staging/.env.example`), so the
+source of the values depends on who runs the apply:
+
+- **Manual / first bring-up** — a local `k8s/overlays/staging/.env` you fill in.
+- **CI** — the values live in **GitHub Actions Secrets**; the deploy workflow
+  reconstructs the `.env` on the ephemeral runner, then applies. Set:
+  `POSTGRES_PASSWORD`, `DATABASE_URL`, `JWT_SECRET`, `STRIPE_SECRET_KEY`,
+  `PHARMACY_A_SECRET`, `PHARMACY_B_SECRET`.
+
+Do **not** reuse the local-dev placeholder values from `docker-compose.yml` —
+they are committed and insecure. Generate fresh values for `JWT_SECRET` and
+`POSTGRES_PASSWORD` in particular (e.g. `openssl rand -base64 48`).
+
+> **Production-grade upgrade (not implemented).** At scale the source of truth
+> would be **GCP Secret Manager**, synced into Kubernetes Secrets by the
+> **External Secrets Operator** (or the Secret Manager CSI driver) — no `.env`,
+> no secrets in CI, centralized rotation. The `.env` / GitHub-Secrets flow here
+> is the pragmatic equivalent for a single-environment project.
+
+### CI/CD
+
+Two GitHub Actions workflows, split by trust boundary:
+
+- **`ci.yml` (pull requests)** — deterministic, **credential-free** gates: Go
+  build/vet/test/lint, Kustomize render, and `terraform validate`. These are the
+  **required status checks** for branch protection on `main`, and they pair with
+  a review from the Claude GitHub app: CI enforces the mechanical gates, the
+  review covers judgment. A PR touches no cloud resources.
+- **`deploy-staging.yml` (push to `main`)** — builds and pushes the six images to
+  Artifact Registry (tagged with the commit SHA), pins those tags into the
+  overlay, and applies to the staging namespace. Because direct pushes to `main`
+  are blocked, this runs only after a reviewed PR merges. Only this workflow
+  holds cloud credentials.

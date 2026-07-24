@@ -1,0 +1,150 @@
+# The three mock external services. In production these remain mocks — the whole
+# system is a learning build, so there are no real pharmacy/shipping vendors.
+# All internal-only (ClusterIP, no Ingress); the backend/worker reach them by
+# Service name (http://mock-pharmacy-a:8080, etc.). Each mock's auth token is the
+# SAME shared secret the backend/worker use for that vendor, pulled from the
+# Secret so the two sides always match.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-pharmacy-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-pharmacy-a
+  template:
+    metadata:
+      labels:
+        app: mock-pharmacy-a
+    spec:
+      containers:
+        - name: mock-pharmacy-a
+          image: medmarket-mock-pharmacy-a
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: API_KEY               # must equal the backend's PHARMACY_A_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: medmarket-secrets
+                  key: PHARMACY_A_SECRET
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-pharmacy-a
+spec:
+  selector:
+    app: mock-pharmacy-a
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-pharmacy-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-pharmacy-b
+  template:
+    metadata:
+      labels:
+        app: mock-pharmacy-b
+    spec:
+      containers:
+        - name: mock-pharmacy-b
+          image: medmarket-mock-pharmacy-b
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: API_TOKEN             # must equal the backend's PHARMACY_B_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: medmarket-secrets
+                  key: PHARMACY_B_SECRET
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-pharmacy-b
+spec:
+  selector:
+    app: mock-pharmacy-b
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-shipping
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-shipping
+  template:
+    metadata:
+      labels:
+        app: mock-shipping
+    spec:
+      containers:
+        - name: mock-shipping
+          image: medmarket-mock-shipping
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            # Seconds-per-stage in the delivery timeline (no auth on this mock).
+            - name: SHIPPING_INTERVAL_MS
+              value: "15000"
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-shipping
+spec:
+  selector:
+    app: mock-shipping
+  ports:
+    - port: 8080
+      targetPort: 8080

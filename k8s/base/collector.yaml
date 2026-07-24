@@ -1,0 +1,86 @@
+# OpenTelemetry Collector — the single OTLP sink the backend + worker export to.
+# In-cluster it forwards traces to Cloud Trace and logs to Cloud Logging via the
+# googlecloud exporter, authenticating keyless through Workload Identity (the
+# medmarket-collector KSA is annotated in the overlay to impersonate the
+# collector GSA). The app stays vendor-neutral — it only speaks OTLP to this Service.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: medmarket-collector
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+    processors:
+      batch: {}
+    exporters:
+      googlecloud:
+        project: project-8628faf2-7f2e-46d0-a01
+        log:
+          default_log_name: medmarket
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [googlecloud]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [googlecloud]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      serviceAccountName: medmarket-collector    # the WI link (annotated in overlay)
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.109.0
+          args: ["--config=/etc/otelcol/config.yaml"]
+          ports:
+            - containerPort: 4317
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config     # projects config.yaml as a file
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - port: 4317
+      targetPort: 4317

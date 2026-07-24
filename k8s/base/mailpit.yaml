@@ -1,0 +1,46 @@
+# Mailpit — the in-cluster mail sink. This learning build sends no real email;
+# the backend/worker SMTP adapter dials mailpit:1025 and Mailpit captures every
+# message. The web UI (8025) is internal-only — view caught mail via
+# `kubectl port-forward svc/mailpit 8025:8025`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:latest
+          ports:
+            - containerPort: 1025    # SMTP
+            - containerPort: 8025    # web UI
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+spec:
+  selector:
+    app: mailpit
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: 1025
+    - name: ui
+      port: 8025
+      targetPort: 8025
