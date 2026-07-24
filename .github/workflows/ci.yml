@@ -25,8 +25,12 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...                 # unit tests only (Docker-free)
-      - uses: golangci/golangci-lint-action@v6
+      # golangci-lint-action@v7 is the major that supports golangci-lint v2 (v6
+      # defaults to v1). Pin the exact version used locally — its binary must be
+      # built with Go >= the module's go directive (1.26), or it refuses to run.
+      - uses: golangci/golangci-lint-action@v7
         with:
+          version: v2.12.2
           working-directory: backend
           args: --build-tags=integration,smoke
 
