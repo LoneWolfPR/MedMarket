@@ -6,8 +6,12 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: medmarket
+  annotations:
+    # GKE requires the annotation form — it ignores spec.ingressClassName and
+    # does not create a `gce` IngressClass object, so ingressClassName never
+    # matches and the Ingress is left unprocessed.
+    kubernetes.io/ingress.class: "gce"
 spec:
-  ingressClassName: gce          # GKE's external HTTP(S) load balancer
   rules:
     - http:
         paths:

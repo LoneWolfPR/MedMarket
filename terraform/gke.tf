@@ -10,6 +10,29 @@ resource "google_container_cluster" "medmarket" {
   network_policy {
     enabled = true
   }
+  # HTTP load balancing (the L7 Ingress controller) was enabled out-of-band via
+  # gcloud; captured here for reproducibility. Every currently-enabled addon is
+  # declared explicitly because terraform resets unlisted addons to their
+  # defaults — omitting gce_persistent_disk_csi_driver would disable it and break
+  # the StatefulSet PVCs. Run `terraform plan` and confirm nothing here is being
+  # DISABLED before applying.
+  addons_config {
+    http_load_balancing {
+      disabled = false
+    }
+    horizontal_pod_autoscaling {
+      disabled = false
+    }
+    gce_persistent_disk_csi_driver_config {
+      enabled = true
+    }
+    dns_cache_config {
+      enabled = true
+    }
+    network_policy_config {
+      disabled = false
+    }
+  }
   release_channel {
     channel = "REGULAR"
   }
