@@ -30,15 +30,19 @@ tasks:
     cmds:
       - docker compose logs -f
 
-  # The node pool autoscales 0–2, so parking is done by removing/adding pod
-  # demand — NOT by resizing nodes (the autoscaler would just counteract it).
+  # Parking to $0 requires disabling autoscaling: with it on, the autoscaler
+  # re-adds nodes to run kube-system pods (kube-dns needs 2), so a plain
+  # resize-to-0 bounces back. So: disable autoscaling → resize 0 (holds).
+  # cluster-up re-enables it and lets the autoscaler wake nodes for the workloads.
   cluster-up:
-    desc: bring staging back up (autoscaler wakes nodes from 0; pulls :latest images)
+    desc: bring staging back up — re-enable autoscaling, then apply (autoscaler scales from 0)
     cmds:
+      - gcloud container clusters update medmarket --enable-autoscaling --min-nodes 0 --max-nodes 2 --node-pool medmarket-pool --zone us-central1-a
       - kubectl apply -k k8s/overlays/staging
 
   cluster-down:
-    desc: park — scale workloads to 0 and drop the LB; namespace + PVC data persist
+    desc: park at $0 — drop the LB, disable autoscaling, resize nodes to 0 (PVC data persists)
     cmds:
-      - kubectl scale statefulset,deployment --all --replicas=0 -n staging
       - kubectl delete ingress medmarket -n staging --ignore-not-found
+      - gcloud container clusters update medmarket --no-enable-autoscaling --node-pool medmarket-pool --zone us-central1-a
+      - gcloud container clusters resize medmarket --node-pool medmarket-pool --num-nodes 0 --zone us-central1-a --quiet

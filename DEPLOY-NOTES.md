@@ -164,11 +164,18 @@ Workload Identity, Kustomize manifests, Artifact Registry images, terraform infr
   addons) need a manual `terraform apply`. Fixing a stuck cluster ≠ needing a
   redeploy — the images are already in Artifact Registry and the manifests are
   already applied.
-- **Parking with autoscaling:** `gcloud ... resize --num-nodes 0` does **not**
-  stick — the autoscaler re-adds nodes to satisfy pending pods. Park by removing
-  pod demand instead: scale workloads to 0 + delete the Ingress (drops the LB).
-  `task cluster-down` does this. Bring back with `task cluster-up` (`apply -k`,
-  no rebuild).
+- **Parking a GKE cluster to $0 with an autoscaling pool is genuinely fiddly.**
+  Two things fight you: (1) scaling workloads to 0 does **not** drain the nodes —
+  GKE's autoscaler keeps a floor to run its own kube-system pods (`kube-dns` runs
+  2 replicas with anti-affinity → needs 2 nodes); (2) a plain
+  `resize --num-nodes 0` **bounces back** — the autoscaler re-adds nodes for those
+  same kube-system pods. The only reliable park-to-$0: **disable autoscaling,
+  then resize to 0** (now it holds). Also **delete the Ingress** — the L7 LB bills
+  separately from nodes (~$18/mo) and stays up otherwise. `task cluster-down` does
+  all three (delete ingress → disable autoscaling → resize 0); `task cluster-up`
+  re-enables autoscaling → `apply -k` (autoscaler then scales nodes up for the
+  workloads). Caveat: disabling autoscaling via gcloud creates terraform drift —
+  don't `terraform apply` while parked, it'd re-enable autoscaling and wake nodes.
 - **Merge to `main` without deploying:** put `[skip ci]` in the **merge commit
   message** (not the PR title/description).
 - **`git stash` does not stash untracked files** by default — new files stay in
