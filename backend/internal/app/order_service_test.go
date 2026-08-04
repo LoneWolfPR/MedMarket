@@ -285,8 +285,7 @@ func TestOrderService_PlaceOrder_OfferFetchErrorIsGeneric(t *testing.T) {
 }
 
 func TestOrderService_PlaceOrder_PrescriptionFetchErrorIsGeneric(t *testing.T) {
-	// FKs guarantee the prescription exists, so its absence is a data-integrity bug
-	// (500), not a client error.
+	// An unexpected prescription-repo error is not a typed 4xx; it propagates to a 500.
 	k := newOrderKit(t)
 	k.rx = fakePrescriptionRepo{
 		getByIDFn: func(context.Context, uuid.UUID) (*prescription.Prescription, error) { return nil, errBoom },
@@ -294,6 +293,21 @@ func TestOrderService_PlaceOrder_PrescriptionFetchErrorIsGeneric(t *testing.T) {
 
 	_, err := k.svc(t).PlaceOrder(context.Background(), k.input)
 	require.ErrorIs(t, err, errBoom)
+}
+
+func TestOrderService_PlaceOrder_PrescriptionNotFoundHidesOffer(t *testing.T) {
+	// A broken ownership chain collapses to not-found rather than leaking that the
+	// offer exists — matching GetOrderStatus. FKs make this state impossible, so the
+	// service logs it as corruption even though the caller only sees a 404.
+	k := newOrderKit(t)
+	k.rx = fakePrescriptionRepo{
+		getByIDFn: func(context.Context, uuid.UUID) (*prescription.Prescription, error) {
+			return nil, outbound.ErrPrescriptionNotFound
+		},
+	}
+
+	_, err := k.svc(t).PlaceOrder(context.Background(), k.input)
+	require.ErrorIs(t, err, inbound.ErrOfferNotFound)
 }
 
 func TestOrderService_PlaceOrder_UserNotFoundMapsToInvalidCredentials(t *testing.T) {

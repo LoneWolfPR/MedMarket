@@ -7,8 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/mailer"
-	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/shipping"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/order"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
@@ -205,7 +203,7 @@ func (a *Activities) RegisterWebhookActivity(
 
 	err := a.shippingClient.RegisterWebhook(ctx, trimmedTracking, trimmedCallback)
 	if err != nil {
-		if errors.Is(err, shipping.ErrShippingRejected) {
+		if errors.Is(err, outbound.ErrShippingRejected) {
 			return temporal.NewNonRetryableApplicationError(
 				"error registerring webhook",
 				"ErrShippingRejected",
@@ -254,9 +252,9 @@ func (a *Activities) SendEmailUpdate(ctx context.Context, i EmailUpdateInput) er
 		Message: i.Message,
 	})
 	if err != nil {
-		if errors.Is(err, mailer.ErrInvalidMessage) {
+		if errors.Is(err, outbound.ErrInvalidMessage) {
 			return temporal.NewNonRetryableApplicationError(
-				mailer.ErrInvalidMessage.Error(),
+				outbound.ErrInvalidMessage.Error(),
 				"ErrInvalidMessage",
 				err,
 			)
@@ -307,7 +305,6 @@ func (a *Activities) AuthorizePaymentActivity(ctx context.Context, i AuthorizeAc
 		}
 		return "", fmt.Errorf("error authorizing payment: %w", err)
 	}
-
 	return authResult.AuthorizationID, nil
 }
 

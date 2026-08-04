@@ -13,6 +13,7 @@ import (
 const (
 	msgInternalServerError = "internal server error"
 	msgUnauthorized        = "Unauthorized"
+	msgFileTooLarge        = "file too large"
 )
 
 // toUserResponse maps a domain user onto the OpenAPI UserResponse DTO, applying

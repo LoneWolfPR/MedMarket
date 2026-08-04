@@ -55,9 +55,6 @@ type registerBody struct {
 	CallbackURL string `json:"callbackUrl"`
 }
 
-//nolint:revive // sentinel error
-var ErrShippingRejected = errors.New("shipping registration rejected")
-
 // RegisterWebhook reaches out to the shipping service and sets up a callback
 // url for the system to notify when there are updates to a shipment attached
 // to the provided tracking id
@@ -70,12 +67,12 @@ func (c *Client) RegisterWebhook(ctx context.Context, trackingID, callbackURL st
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return fmt.Errorf("error marshaling json data: %w: %w", ErrShippingRejected, err)
+		return fmt.Errorf("error marshaling json data: %w: %w", outbound.ErrShippingRejected, err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, registerPath, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("error constructing request: %w: %w", ErrShippingRejected, err)
+		return fmt.Errorf("error constructing request: %w: %w", outbound.ErrShippingRejected, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.client.Do(req)
@@ -92,7 +89,7 @@ func (c *Client) RegisterWebhook(ctx context.Context, trackingID, callbackURL st
 			"failed to register webhook with shipping service with status %d: %s",
 			resp.StatusCode, bodyBytes)
 		if !httpx.IsRetryableStatus(resp.StatusCode) {
-			return fmt.Errorf("%w: %w", ErrShippingRejected, respError)
+			return fmt.Errorf("%w: %w", outbound.ErrShippingRejected, respError)
 		}
 		return respError
 	}

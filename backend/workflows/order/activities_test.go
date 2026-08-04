@@ -8,8 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/mailer"
-	"github.com/LoneWolfPR/MedMarket/backend/internal/adapters/outbound/shipping"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/order"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/pharmacy"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
@@ -491,7 +489,7 @@ func TestRegisterWebhookActivity_MissingFieldsAreNonRetryable(t *testing.T) {
 func TestRegisterWebhookActivity_RejectedIsNonRetryable(t *testing.T) {
 	a := orderwf.NewActivities(orderwf.NewActivitiesParams{
 		ShippingClient: fakeShippingClient{
-			registerFn: func(context.Context, string, string) error { return shipping.ErrShippingRejected },
+			registerFn: func(context.Context, string, string) error { return outbound.ErrShippingRejected },
 		},
 	})
 
@@ -580,7 +578,7 @@ func TestSendEmailUpdate_EmptyMessageIsNonRetryable(t *testing.T) {
 func TestSendEmailUpdate_InvalidMessageIsNonRetryable(t *testing.T) {
 	a := orderwf.NewActivities(orderwf.NewActivitiesParams{
 		EmailSender: fakeEmailSender{
-			sendFn: func(context.Context, outbound.EmailSenderParams) error { return mailer.ErrInvalidMessage },
+			sendFn: func(context.Context, outbound.EmailSenderParams) error { return outbound.ErrInvalidMessage },
 		},
 	})
 

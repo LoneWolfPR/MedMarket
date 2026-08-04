@@ -227,7 +227,7 @@ func TestUploadRoute_FileTooLarge(t *testing.T) {
 	rec := doUpload(t, handler, body, ct, "any-token")
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
-	assert.Equal(t, inbound.ErrFileTooLarge.Error(), decodeMessage(t, rec))
+	assert.Equal(t, "file too large", decodeMessage(t, rec))
 }
 
 func TestUploadRoute_NonIntegerQuantity(t *testing.T) {

@@ -139,7 +139,7 @@ func (h *PrescriptionHandler) UploadPrescription(
 	if len(docData) > uploadLimit {
 		return openapi.UploadPrescription400JSONResponse{
 			BadRequestJSONResponse: openapi.BadRequestJSONResponse{
-				Message: inbound.ErrFileTooLarge.Error(),
+				Message: msgFileTooLarge,
 			},
 		}, nil
 	}
