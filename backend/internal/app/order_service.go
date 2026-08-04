@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/order"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/pharmacy"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/prescription"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/inbound"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
 
@@ -78,21 +80,50 @@ func NewOrderService(p NewOrderServiceParams) (*OrderService, error) {
 	}, nil
 }
 
+// ownedOffer resolves an offer and its prescription, then verifies the caller owns
+// them. Every way that chain can fail — the offer is gone, its prescription is gone,
+// or the prescription belongs to someone else — collapses to inbound.ErrOfferNotFound
+// so a caller can never probe for records it has no right to see. Callers translate
+// that sentinel into their own vocabulary.
+func (s *OrderService) ownedOffer(
+	ctx context.Context,
+	userID, offerID uuid.UUID,
+) (*pharmacy.Offer, *prescription.Prescription, error) {
+	offerRecord, err := s.offerRepo.GetByID(ctx, offerID)
+	if err != nil {
+		if errors.Is(err, outbound.ErrOfferNotFound) {
+			return nil, nil, fmt.Errorf("%w: %w", inbound.ErrOfferNotFound, err)
+		}
+		return nil, nil, fmt.Errorf("error fetching offer record: %w", err)
+	}
+
+	rxRecord, err := s.rxRepo.GetByID(ctx, offerRecord.PrescriptionID)
+	if err != nil {
+		if errors.Is(err, outbound.ErrPrescriptionNotFound) {
+			// A foreign key guarantees this row exists, so its absence is corruption
+			// rather than a client error. The caller still sees not-found, but the
+			// integrity problem must not disappear with it.
+			s.logger.ErrorContext(ctx, "offer references a missing prescription",
+				"offer_id", offerID,
+				"prescription_id", offerRecord.PrescriptionID)
+			return nil, nil, fmt.Errorf("%w: %w", inbound.ErrOfferNotFound, err)
+		}
+		return nil, nil, fmt.Errorf("error fetching prescription record: %w", err)
+	}
+
+	if rxRecord.UserID != userID {
+		return nil, nil, inbound.ErrOfferNotFound
+	}
+	return offerRecord, rxRecord, nil
+}
+
 // PlaceOrder takes an incoming request from the external handler and calls out to the starter
 // to initiate an order workflow
 func (s *OrderService) PlaceOrder(ctx context.Context, i inbound.OrderInput) (inbound.OrderView, error) {
-	// Fetch offer
-	offerRecord, err := s.offerRepo.GetByID(ctx, i.OfferID)
+	// Fetch the offer and prescription, confirming the caller owns them
+	offerRecord, rxRecord, err := s.ownedOffer(ctx, i.UserID, i.OfferID)
 	if err != nil {
-		if errors.Is(err, outbound.ErrOfferNotFound) {
-			return inbound.OrderView{}, fmt.Errorf("%w: %w", inbound.ErrOfferNotFound, err)
-		}
-		return inbound.OrderView{}, fmt.Errorf("error fetching offer record: %w", err)
-	}
-	// Fetch prescription
-	rxRecord, err := s.rxRepo.GetByID(ctx, offerRecord.PrescriptionID)
-	if err != nil {
-		return inbound.OrderView{}, fmt.Errorf("error fetching prescription record: %w", err)
+		return inbound.OrderView{}, err
 	}
 	// Fetch user
 	userRecord, err := s.userRepo.GetByID(ctx, i.UserID)
@@ -101,10 +132,6 @@ func (s *OrderService) PlaceOrder(ctx context.Context, i inbound.OrderInput) (in
 			return inbound.OrderView{}, fmt.Errorf("%w: %w", inbound.ErrInvalidCredentials, err)
 		}
 		return inbound.OrderView{}, fmt.Errorf("error fetching user record: %w", err)
-	}
-	// validate offer owned by user
-	if rxRecord.UserID != i.UserID {
-		return inbound.OrderView{}, inbound.ErrOfferNotFound
 	}
 	// validate offer is not expired
 	if time.Now().After(offerRecord.ExpiresAt) {
@@ -183,22 +210,12 @@ func (s *OrderService) GetOrderStatus(
 		}
 		return inbound.OrderStatusView{}, fmt.Errorf("error fetching order status: %w", err)
 	}
-	offer, err := s.offerRepo.GetByID(ctx, orderRecord.OfferID)
-	if err != nil {
-		if errors.Is(err, outbound.ErrOfferNotFound) {
+	// An order the caller doesn't own is reported as missing, in the order's vocabulary
+	if _, _, err = s.ownedOffer(ctx, userID, orderRecord.OfferID); err != nil {
+		if errors.Is(err, inbound.ErrOfferNotFound) {
 			return inbound.OrderStatusView{}, inbound.ErrOrderNotFound
 		}
-		return inbound.OrderStatusView{}, fmt.Errorf("error fetching offer from order: %w", err)
-	}
-	rx, err := s.rxRepo.GetByID(ctx, offer.PrescriptionID)
-	if err != nil {
-		if errors.Is(err, outbound.ErrPrescriptionNotFound) {
-			return inbound.OrderStatusView{}, inbound.ErrOrderNotFound
-		}
-		return inbound.OrderStatusView{}, fmt.Errorf("error fetching prescription: %w", err)
-	}
-	if rx.UserID != userID {
-		return inbound.OrderStatusView{}, inbound.ErrOrderNotFound
+		return inbound.OrderStatusView{}, err
 	}
 
 	shippingStatus, err := s.querier.QueryShippingStatus(ctx, orderID)

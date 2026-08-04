@@ -13,7 +13,6 @@ import (
 //nolint:revive // sentinel errors are self-documenting
 var (
 	ErrInvalidFile          = errors.New("invalid file")
-	ErrFileTooLarge         = errors.New("file too large")
 	ErrPrescriptionNotFound = errors.New("prescription not found")
 )
 

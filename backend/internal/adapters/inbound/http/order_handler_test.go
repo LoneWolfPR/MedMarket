@@ -138,6 +138,8 @@ func TestCreateOrderRoute_ServiceErrorsMapToStatus(t *testing.T) {
 		"offer not found -> 404": {svcErr: inbound.ErrOfferNotFound, wantCode: http.StatusNotFound},
 		"already placed -> 409":  {svcErr: inbound.ErrOrderAlreadyPlaced, wantCode: http.StatusConflict},
 		"offer expired -> 410":   {svcErr: inbound.ErrOfferExpired, wantCode: http.StatusGone},
+		// A deleted account holding a still-valid token is an auth failure, not a 500.
+		"deleted account -> 401": {svcErr: inbound.ErrInvalidCredentials, wantCode: http.StatusUnauthorized},
 		"unexpected -> 500":      {svcErr: errBoom, wantCode: http.StatusInternalServerError},
 	}
 	for name, tc := range tests {
