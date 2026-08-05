@@ -7,6 +7,9 @@ includes:
   backend:
     taskfile: ./backend/Taskfile.yml
     dir: ./backend
+  frontend:
+    taskfile: ./frontend/Taskfile.yml
+    dir: ./frontend
 
 tasks:
   default:
