@@ -1,22 +1,40 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 
+type HealthResponse = { status: string }
 function Home() {
-  // Hitting /api/health through Traefik proves both routes work end to end:
-  // the browser loads the frontend at / and reaches the backend at /api.
-  const [health, setHealth] = useState('checking…')
+  const health = useQuery({
+    queryKey: ['health'],
+    queryFn: async () => {
+      let resp: Response
+      try {
+        resp = await fetch('/api/health')
+      } catch (e: unknown) {
+        console.error(e)
+        throw new Error("error fetching health", { cause: e })
+      }
+      if (resp.ok) {
+        const healthStatus: HealthResponse = await resp.json()
+        return healthStatus.status
+      } else {
+        throw new Error("error fetching health");
+      }
+    }
+  })
 
-  useEffect(() => {
-    fetch('/api/health')
-      .then((res) => res.json())
-      .then((data: { status: string }) => setHealth(data.status))
-      .catch(() => setHealth('unreachable'))
-  }, [])
+  let statusText: string
+  if (health.isPending) {
+    statusText = 'checking...'
+  } else if (health.isError) {
+    statusText = health.error.message
+  } else {
+    statusText = health.data
+  }
 
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Welcome to MedMarket</h1>
       <p>
-        Backend health: <strong>{health}</strong>
+        Backend health: <strong>{statusText}</strong>
       </p>
     </div>
   )

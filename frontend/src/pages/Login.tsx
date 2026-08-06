@@ -1,44 +1,40 @@
 import { useState } from 'react'
+import useAuth from '../auth/useAuth'
+import { useLocation, useNavigate } from 'react-router'
 
-type TokenResponse = { token: string }
-type ApiError = { message: string }
-
+function isValidRedirect(state: unknown): state is { from: string } {
+  return (
+    typeof state === 'object' &&
+    state !== null &&
+    'from' in state &&
+    typeof state.from === 'string' &&
+    state.from.startsWith('/') &&
+    !state.from.startsWith('//')
+  )
+}
 function Login() {
+  const navigate = useNavigate()
+  const { state: locState } = useLocation()
+  const { login } = useAuth()
   const [isPending, setIsPending] = useState(false)
   const [formError, setFormError] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [token, setToken] = useState('')
   const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault()
     setFormError('')
     setIsPending(true)
     try {
-      const resp = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      })
-
-      if (resp.ok) {
-        const data: TokenResponse = await resp.json()
-        setToken(data.token)
-        setEmail('')
-        setPassword('')
-      } else {
-        const err: ApiError = await resp.json()
-        setFormError(err.message)
-        setPassword('')
-      }
+      await login(email, password)
+      const dest = isValidRedirect(locState) ? locState.from : '/'
+      navigate(dest, { replace: true })
     } catch (e: unknown) {
       if (e instanceof Error) {
-        setFormError('Somethign went wrong')
+        setFormError(e.message)
       } else {
         setFormError('Something went wrong')
-        console.error('An unexpected error occurred: ', e)
       }
+      console.error('An unexpected error occurred: ', e)
     } finally {
       setIsPending(false)
     }
@@ -50,7 +46,6 @@ function Login() {
       <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Login</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {formError && <p className="text-sm text-red-600">{formError}</p>}
-        {token && <p className="text-sm text-green-600">{token}</p>}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="email" className="text-sm font-medium text-slate-700">
             Email
@@ -80,7 +75,7 @@ function Login() {
         <button
           type="submit"
           disabled={isPending}
-          className="w-full sm:w-auto bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700 focus:ring-teal-600 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
+          className="w-full sm:w-auto bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer hover:bg-teal-700 focus:ring-teal-600 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
         >
           {isPending ? 'Signing in...' : 'Sign in'}
         </button>

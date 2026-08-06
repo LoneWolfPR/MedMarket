@@ -1,11 +1,18 @@
-import { Link, NavLink, Outlet } from 'react-router'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router'
 import type { NavLinkRenderProps } from 'react-router'
+import useAuth from '../auth/useAuth'
 
 const navLinkClass = ({ isActive }: NavLinkRenderProps) => {
   return isActive ? 'text-teal-600' : 'text-slate-600 hover:text-slate-900'
 }
 
 function Layout() {
+  const { isAuthenticated, logout } = useAuth()
+  const navigate = useNavigate()
+  const handleLogout = () => {
+    logout()
+    navigate('/')
+  }
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
@@ -17,9 +24,24 @@ function Layout() {
             <NavLink to="/" className={navLinkClass}>
               Home
             </NavLink>
-            <NavLink to="/login" className={navLinkClass}>
-              Login
-            </NavLink>
+            {isAuthenticated ? (
+              <>
+                <NavLink to="/prescriptions" className={navLinkClass}>
+                  Prescriptions
+                </NavLink>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="text-sm font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <NavLink to="/login" className={navLinkClass}>
+                Login
+              </NavLink>
+            )}
           </nav>
         </div>
       </header>
