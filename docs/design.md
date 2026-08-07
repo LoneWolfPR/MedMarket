@@ -107,6 +107,45 @@ indicator. Error state: `red-600` border, message below in `text-xs` `red-600`.
 `white`, `slate-200` border, `rounded-lg`, `shadow-sm`, `p-4` (or `p-6` for a
 form panel).
 
+### Prescription card
+
+A wide, low-density row. One card per prescription, stacked in a single column
+at the full width of the content column — no grid.
+
+Internally it's a two-part row: **identity on the left, action on the right**,
+pushed apart, vertically centered. On small screens let the action drop below
+the identity block rather than crushing it.
+
+Left block, three lines, tight vertical rhythm (`gap-1`):
+
+| Line | Content | Style |
+| --- | --- | --- |
+| Title | Med name + strength as one string — "Lisinopril 20mg" | `text-base` `font-medium` `slate-900` |
+| Detail | "Prescribed by {physician}" | `text-sm` `slate-600` |
+| Meta | "Qty {quantity}" | `text-xs` `slate-400` |
+
+Strength is `strengthValue` and `strengthUnit` concatenated with **no space** —
+that matches how the backend's `MedStrength.String()` renders it.
+
+Right: the document link — a text link, not a button. A button per row in a list
+reads as heavier than the action deserves. `text-sm` `font-medium` `teal-600`,
+hover `teal-700` with an underline. It opens a presigned URL on another origin,
+so it targets a new tab and carries `rel="noopener noreferrer"`.
+
+### List page states
+
+Every list page has the same four-state skeleton under its page title. The title
+is always rendered — it never disappears into a loading branch.
+
+| State | Treatment |
+| --- | --- |
+| Loading | Body copy, `slate-600` — "Loading prescriptions…". Skeletons aren't worth it at this scale. |
+| Error | `text-sm` `red-600`, generic copy. Never render a raw exception message. |
+| Empty | Centered inside a dashed `slate-300` bordered panel, `rounded-lg`, `p-8`: one line of `slate-600` explaining the list is empty, and a `slate-400` `text-xs` line pointing at the next action. |
+| Loaded | The list itself. |
+
+The empty state is a designed state, not a blank page — see rule 5.
+
 ### Form layout
 
 Single column, `gap-4` between fields. Label above input, `gap-1.5` between

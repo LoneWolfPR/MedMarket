@@ -10,15 +10,15 @@ function Home() {
         resp = await fetch('/api/health')
       } catch (e: unknown) {
         console.error(e)
-        throw new Error("error fetching health", { cause: e })
+        throw new Error('error fetching health', { cause: e })
       }
       if (resp.ok) {
         const healthStatus: HealthResponse = await resp.json()
         return healthStatus.status
       } else {
-        throw new Error("error fetching health");
+        throw new Error('error fetching health')
       }
-    }
+    },
   })
 
   let statusText: string
