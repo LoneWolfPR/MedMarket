@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import useAuth from '../auth/useAuth'
 import { useLocation, useNavigate } from 'react-router'
+import { inputClass } from './sharedClasses'
 
 function isValidRedirect(state: unknown): state is { from: string } {
   return (
@@ -39,8 +40,7 @@ function Login() {
       setIsPending(false)
     }
   }
-  const inputClass =
-    'bg-white border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-teal-600 focus:ring-2 focus:border-teal-600 focus:outline-hidden'
+
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-6 max-w-sm mx-auto">
       <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Login</h1>

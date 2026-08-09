@@ -95,6 +95,11 @@ offset. Disabled: `slate-300` background, `slate-500` text, not-allowed cursor.
 `white` background, `slate-200` border, `slate-700` text. Hover `slate-50`.
 Same size and radius as primary.
 
+**Surface caveat.** This variant assumes the `slate-50` page background, where
+white reads as raised. On a **white card** it flattens into a hairline outline —
+there, use a subtle fill instead (`slate-100`, hover `slate-200`, no border).
+Check what a button is sitting on before reaching for this one.
+
 ### Input / textarea / select
 
 Full width, `white`, `slate-300` border, `rounded-md`, `px-3 py-2`, `text-sm`.
@@ -165,6 +170,81 @@ Width follows content, not the viewport:
 
 Form-level error messages sit above the first field: `text-sm` `red-600`.
 Field-level errors sit below their input: `text-xs` `red-600`.
+
+#### Field rows
+
+A form is a single column **by default**, but short fields shouldn't be
+stretched to the full page column — a quantity box at 1024px wide reads as a
+mistake. Group short, related fields into a row: one column on small screens,
+`sm:grid-cols-*` from `sm:` up, with the same `gap-4` as the vertical rhythm so
+the spacing stays uniform in both axes.
+
+Width should follow the *content*, not the container. Long free text (names,
+addresses) takes the full width; a number, a unit, or a short code shares a row.
+
+Each cell in the row is a complete field group — **label above input, always**,
+exactly as in a stacked form. Nothing about being in a row changes it. Labels
+beside inputs would break alignment the moment one of them wrapped, and a form
+that mixes both placements reads as unfinished. Keep row labels short enough not
+to wrap in a narrow column ("Strength", "Unit", "Quantity").
+
+#### File input
+
+Don't hide or fake the native control — a custom "upload" widget that isn't a
+real `<input type="file">` breaks keyboard access and drag-and-drop for no gain.
+Style the native one instead, and leave the filename text beside it at `text-sm`
+`slate-600`.
+
+The button gets a **subtle fill**, not the secondary-button treatment:
+`slate-100` background, hover `slate-200`, `slate-700` text, `rounded-md`,
+`text-sm` `font-medium`, and its own padding. No border.
+
+Two reasons it differs from `Button — secondary`: it sits on a **white card**,
+where a white button reduces to a hairline border at the smallest size in the
+form; and it must stay visually subordinate to the submit button, since choosing
+a file is a step, not the action. Two equally prominent buttons in one form is
+the failure on the other side.
+
+Note that Tailwind's preflight zeroes this pseudo-element's padding, border, and
+cursor, so every one of those has to be stated explicitly — nothing carries over
+from the button styles elsewhere in the system.
+
+Below it, a `text-xs` `slate-400` helper line stating what's accepted — file
+inputs are the one control where users genuinely can't guess the constraint.
+
+### Prescription upload panel
+
+Sits directly above the list on the prescriptions page. A **Card** at `p-6`,
+taking the full page-column width (it's embedded in a page, so the `max-w-sm`
+standalone-panel rule does not apply).
+
+Structure, top to bottom:
+
+| Element | Treatment |
+| --- | --- |
+| Heading | Section heading — `text-lg` `font-semibold` `slate-900` |
+| Status line | Error `text-sm` `red-600`, success `text-sm` `emerald-600`. Reserve one slot above the fields; only one shows at a time. |
+| Medication name | Full width |
+| Physician name | Full width |
+| Strength value / unit / quantity | One field row, three-up from `sm:` |
+| Document | File input + helper line |
+| Submit | Primary button, full width on mobile, `sm:w-auto`. Pending label "Uploading…", disabled while in flight. |
+
+On success, clear every field including the file input, and show the
+confirmation line. The list refetching below is itself the strongest feedback —
+the confirmation is there to explain *why* the form went blank, so it can be
+brief.
+
+### Page composition — panel above list
+
+When a page carries both a write affordance and the list it writes to, stack
+them in one column with `gap-8` between — noticeably more than the `gap-4`
+between sibling cards, so the two regions read as separate concerns rather than
+as three cards in a row.
+
+The page title sits above both. The list keeps its own four-state skeleton
+underneath, and its **empty state should point at the panel above it** rather
+than at some other page.
 
 ### Status badge
 

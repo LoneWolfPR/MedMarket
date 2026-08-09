@@ -1,10 +1,8 @@
 import { useCallback, useMemo, useReducer, type ReactNode } from 'react'
 import { AuthContext, type AuthState, type AuthValue } from './AuthContext'
+import { type ApiError, type TokenResponse } from '../api/types'
 
 type AuthAction = { type: 'logged in'; token: string } | { type: 'logged out' }
-
-type TokenResponse = { token: string }
-type ApiError = { message: string }
 
 const LS_TOKEN_KEY = 'token'
 
