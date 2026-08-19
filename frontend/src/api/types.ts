@@ -15,4 +15,4 @@ export type PrescriptionListResponse = { prescriptions: Prescription[] }
 
 export type TokenResponse = { token: string }
 
-export type ApiError = { message: string }
+export type ApiError = { message?: string }
