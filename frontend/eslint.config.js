@@ -25,4 +25,14 @@ export default tseslint.config(
       globals: globals.browser,
     },
   },
+  {
+    files: ['**/*.test.{ts,tsx}'],
+    rules: {
+      // A test probe reaches a value that only exists inside the tree by
+      // assigning the hook's return to a variable outside it. That is a render
+      // side effect, and the rule is right to reject it in application code —
+      // but here the impurity IS the instrument. Scoped to test files only.
+      'react-hooks/globals': 'off',
+    },
+  },
 )

@@ -42,15 +42,31 @@ tasks:
     cmds:
       - npm run typecheck
 
+  test:
+    desc: Run the Vitest suite once (jsdom, no browser or Docker needed)
+    cmds:
+      - npm run test
+
+  test-watch:
+    desc: Run Vitest in watch mode while developing
+    cmds:
+      - npm run test:watch
+
+  test-coverage:
+    desc: Run the suite with a v8 coverage report
+    cmds:
+      - npm run test:coverage
+
   build:
     desc: Type-check and build the production bundle to dist/
     cmds:
       - npm run build
 
   check:
-    desc: Format-check, typecheck, lint, and build in one shot
+    desc: Format-check, typecheck, lint, test, and build in one shot
     cmds:
       - task: format-check
       - task: typecheck
       - task: lint
+      - task: test
       - task: build
