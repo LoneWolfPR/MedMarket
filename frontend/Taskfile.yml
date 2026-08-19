@@ -1,0 +1,72 @@
+# Frontend (React/TS) tasks. Included by the root Taskfile under the `frontend:`
+# namespace with dir set to ./frontend, so these run from the package root.
+#
+# These run on the HOST (they need node_modules installed locally). The app
+# itself still runs in Docker via `task up`; these are the editor/CI-facing
+# checks.
+version: '3'
+
+tasks:
+  install:
+    desc: Install dependencies from the lockfile (clean, reproducible)
+    cmds:
+      - npm ci
+
+  dev:
+    desc: Run the Vite dev server on the host (the Docker stack runs it too — use `task up` for the full stack)
+    cmds:
+      - npm run dev
+
+  format:
+    desc: Format all frontend files with Prettier
+    cmds:
+      - npm run format
+
+  format-check:
+    desc: Fail if any file is not Prettier-formatted (what CI runs)
+    cmds:
+      - npm run format:check
+
+  lint:
+    desc: Run ESLint
+    cmds:
+      - npm run lint
+
+  lint-fix:
+    desc: Run ESLint with --fix
+    cmds:
+      - npm run lint:fix
+
+  typecheck:
+    desc: Type-check without emitting (tsc --noEmit)
+    cmds:
+      - npm run typecheck
+
+  test:
+    desc: Run the Vitest suite once (jsdom, no browser or Docker needed)
+    cmds:
+      - npm run test
+
+  test-watch:
+    desc: Run Vitest in watch mode while developing
+    cmds:
+      - npm run test:watch
+
+  test-coverage:
+    desc: Run the suite with a v8 coverage report
+    cmds:
+      - npm run test:coverage
+
+  build:
+    desc: Type-check and build the production bundle to dist/
+    cmds:
+      - npm run build
+
+  check:
+    desc: Format-check, typecheck, lint, test, and build in one shot
+    cmds:
+      - task: format-check
+      - task: typecheck
+      - task: lint
+      - task: test
+      - task: build

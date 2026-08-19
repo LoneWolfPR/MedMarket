@@ -7,6 +7,9 @@ includes:
   backend:
     taskfile: ./backend/Taskfile.yml
     dir: ./backend
+  frontend:
+    taskfile: ./frontend/Taskfile.yml
+    dir: ./frontend
 
 tasks:
   default:
@@ -29,6 +32,18 @@ tasks:
     desc: Tail logs from the running stack
     cmds:
       - docker compose logs -f
+
+  # Rebuilds one service's image and recreates its container, leaving the rest
+  # of the stack running. `-V` discards anonymous volumes on recreate, which is
+  # the whole point for `frontend`: its node_modules lives in one (see the
+  # compose file), so without `-V` a rebuilt image is paired with the *old*
+  # dependency tree and newly-added packages fail to resolve. Named volumes
+  # (postgres, minio, temporal-db) are untouched by `-V`, so this is safe to
+  # point at any service.
+  restart:
+    desc: 'Rebuild + restart one service, e.g. after adding a dependency (usage: task restart -- frontend)'
+    cmds:
+      - docker compose up -d --build -V {{.CLI_ARGS}}
 
   # Parking to $0 requires disabling autoscaling: with it on, the autoscaler
   # re-adds nodes to run kube-system pods (kube-dns needs 2), so a plain

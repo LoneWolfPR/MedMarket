@@ -10,6 +10,11 @@
 .env.local
 *.local
 
+# Node
+# frontend/ has its own .gitignore covering this, but the repo root did not —
+# an npm install run from the root committed 5k files before anyone noticed.
+node_modules/
+
 # Editor / OS
 .DS_Store
 .idea/

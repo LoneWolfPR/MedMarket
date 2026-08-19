@@ -1,9 +1,9 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  color-scheme: light dark;
-}
+@import 'tailwindcss';
 
-body {
-  margin: 0;
+/* Tailwind v4 is configured in CSS, not a JS config file. Anything declared in
+   @theme becomes both a CSS variable and a utility class — setting --font-sans
+   here is what makes `font-sans` (and the default body font) resolve to this
+   stack. Add design tokens here as the UI grows. */
+@theme {
+  --font-sans: system-ui, Avenir, Helvetica, Arial, sans-serif;
 }

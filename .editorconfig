@@ -1,0 +1,26 @@
+# Editor defaults for the monorepo. https://editorconfig.org
+#
+# VS Code does NOT read this natively — it needs the "EditorConfig for VS Code"
+# extension. The equivalent settings are also mirrored in .vscode/settings.json
+# so indentation is correct without it.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# gofmt uses tabs, and it is not configurable. Anything else breaks `go fmt`.
+[*.go]
+indent_style = tab
+
+[Makefile]
+indent_style = tab
+
+# Two trailing spaces are a hard line break in Markdown, so trimming them
+# silently changes rendered output.
+[*.md]
+trim_trailing_whitespace = false
