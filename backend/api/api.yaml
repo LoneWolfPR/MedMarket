@@ -127,9 +127,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PrescriptionResponse'
+                $ref: '#/components/schemas/PrescriptionListResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -154,15 +152,29 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/QuoteResponse'
+                $ref: '#/components/schemas/QuoteListResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
 
   /api/orders:
+    get:
+      operationId: listOrders
+      summary: List the authenticated user's orders, newest first
+      tags: [orders]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The user's orders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
     post:
       operationId: createOrder
       summary: Place an order for a persisted offer
@@ -386,6 +398,19 @@ components:
           type: string
           description: Short-lived presigned URL to the uploaded document
 
+    # Collection responses are wrapped in an object rather than returned as a
+    # top-level array. An array has nowhere to grow: adding a count, a page
+    # token, or a partial-results warning later would break every client,
+    # whereas new fields on an object are additive.
+    PrescriptionListResponse:
+      type: object
+      required: [prescriptions]
+      properties:
+        prescriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrescriptionResponse'
+
     QuoteResponse:
       type: object
       required: [offerId, pharmacyId, pharmacyName, pharmacyItemId, unitPriceCents, totalCents]
@@ -414,6 +439,15 @@ components:
           format: int64
           description: Unit price multiplied by the prescription quantity, in cents
 
+    QuoteListResponse:
+      type: object
+      required: [quotes]
+      properties:
+        quotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteResponse'
+
     OrderRequest:
       type: object
       required: [offerId, paymentMethod]
@@ -440,6 +474,41 @@ components:
         status:
           type: string
           description: The order's current lifecycle status
+
+    OrderSummaryResponse:
+      type: object
+      required: [orderId, itemName, quantity, status, placedAt]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        itemName:
+          type: string
+          description: The medication name, copied from the prescription this order was placed against
+        quantity:
+          type: integer
+        status:
+          type: string
+          description: The order's current lifecycle status
+        placedAt:
+          type: string
+          format: date-time
+        pricePaidCents:
+          type: integer
+          format: int64
+          description: >-
+            What the payment processor actually captured, in cents. Absent until
+            capture succeeds — note that zero is a legitimate captured amount
+            (full insurance coverage), so it must not be read as unpaid.
+
+    OrderListResponse:
+      type: object
+      required: [orders]
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderSummaryResponse'
 
     OrderStatusResponse:
       type: object

@@ -108,6 +108,30 @@ func (r *OrderRepository) GetByID(ctx context.Context, id uuid.UUID) (*order.Ord
 	return mapToDomainOrder(orderRecord)
 }
 
+// List queries the database for orders that match a list of prescription IDs
+func (r *OrderRepository) List(ctx context.Context, rxIDs []uuid.UUID) ([]order.Order, error) {
+	orders := []order.Order{}
+	if len(rxIDs) == 0 {
+		return orders, nil
+	}
+	records, err := r.client.Order.Query().
+		Where(entorder.PrescriptionIDIn(rxIDs...)).
+		Order(ent.Desc(entorder.FieldCreatedAt)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching order records: %w", err)
+	}
+	for _, record := range records {
+		orderInfo, err := mapToDomainOrder(record)
+		if err != nil {
+			r.logger.ErrorContext(ctx, "error mapping order record", "order_id", record.ID, "error", err)
+		} else {
+			orders = append(orders, *orderInfo)
+		}
+	}
+	return orders, nil
+}
+
 func mapToDomainOrder(orderRecord *ent.Order) (*order.Order, error) {
 	var pricePaid *shared.Money
 	if orderRecord.PricePaidCents != nil {
@@ -128,5 +152,6 @@ func mapToDomainOrder(orderRecord *ent.Order) (*order.Order, error) {
 		TrackingID:      orderRecord.TrackingID,
 		Qty:             orderRecord.Quantity,
 		PricePaid:       pricePaid,
+		PlacedAt:        orderRecord.CreatedAt,
 	}, nil
 }

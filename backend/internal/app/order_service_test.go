@@ -18,6 +18,7 @@ import (
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/user"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/inbound"
 	"github.com/LoneWolfPR/MedMarket/backend/internal/ports/outbound"
+	"github.com/LoneWolfPR/MedMarket/backend/internal/ptr"
 )
 
 // --- order-specific fakes (the shared ones live in fakes_test.go) -----------
@@ -26,6 +27,7 @@ type fakeOrderRepo struct {
 	createFn  func(ctx context.Context, o *order.Order) (*order.Order, error)
 	updateFn  func(ctx context.Context, o *order.Order) (*order.Order, error)
 	getByIDFn func(ctx context.Context, id uuid.UUID) (*order.Order, error)
+	listFn    func(ctx context.Context, rxIDs []uuid.UUID) ([]order.Order, error)
 }
 
 func (f fakeOrderRepo) Create(ctx context.Context, o *order.Order) (*order.Order, error) {
@@ -38,6 +40,10 @@ func (f fakeOrderRepo) Update(ctx context.Context, o *order.Order) (*order.Order
 
 func (f fakeOrderRepo) GetByID(ctx context.Context, id uuid.UUID) (*order.Order, error) {
 	return f.getByIDFn(ctx, id)
+}
+
+func (f fakeOrderRepo) List(ctx context.Context, rxIDs []uuid.UUID) ([]order.Order, error) {
+	return f.listFn(ctx, rxIDs)
 }
 
 type fakeOrderStarter struct {
@@ -537,4 +543,185 @@ func TestOrderService_GetOrderStatus_QueryErrorDegradesGracefully(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, order.StatusShipped, view.Status)
 	assert.Empty(t, view.ShippingStatus)
+}
+
+// --- ListOrders -------------------------------------------------------------
+
+// listKit wires a two-prescription, two-order listing. Tests swap one fake to
+// drive a single branch, and read gotRxIDs to see how the order query was scoped.
+type listKit struct {
+	userID    uuid.UUID
+	rxOne     prescription.Prescription
+	rxTwo     prescription.Prescription
+	orders    []order.Order
+	gotRxIDs  []uuid.UUID
+	rxRepo    fakePrescriptionRepo
+	orderRepo fakeOrderRepo
+}
+
+func newListKit(t *testing.T) *listKit {
+	t.Helper()
+
+	k := &listKit{userID: uuid.New()}
+	k.rxOne = buildRx(t, k.userID)
+	k.rxTwo = buildRx(t, k.userID)
+	k.rxTwo.MedName = "lisinopril"
+
+	paid, err := shared.NewMoneyFromCents(26400)
+	require.NoError(t, err)
+
+	k.orders = []order.Order{
+		{
+			ID:             uuid.New(),
+			PrescriptionID: k.rxTwo.ID,
+			OfferID:        uuid.New(),
+			Status:         order.StatusDelivered,
+			Qty:            30,
+			PricePaid:      ptr.To(paid),
+			PlacedAt:       time.Date(2026, 8, 2, 9, 0, 0, 0, time.UTC),
+		},
+		{
+			ID:             uuid.New(),
+			PrescriptionID: k.rxOne.ID,
+			OfferID:        uuid.New(),
+			Status:         order.StatusPlaced,
+			Qty:            90,
+			PricePaid:      nil,
+			PlacedAt:       time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC),
+		},
+	}
+
+	k.rxRepo = fakePrescriptionRepo{
+		listFn: func(context.Context, uuid.UUID) ([]prescription.Prescription, error) {
+			return []prescription.Prescription{k.rxOne, k.rxTwo}, nil
+		},
+	}
+	k.orderRepo = fakeOrderRepo{
+		listFn: func(_ context.Context, rxIDs []uuid.UUID) ([]order.Order, error) {
+			k.gotRxIDs = rxIDs
+			return k.orders, nil
+		},
+	}
+	return k
+}
+
+func (k *listKit) svc(t *testing.T) *app.OrderService {
+	t.Helper()
+	return newOrderSvc(t, fakeOfferRepo{}, k.rxRepo, fakeUserRepo{}, fakePharmacyRepo{},
+		k.orderRepo, fakeOrderStarter{}, fakeOrderStatusQuerier{})
+}
+
+func TestOrderService_ListOrders_ComposesNamesAndPreservesOrder(t *testing.T) {
+	k := newListKit(t)
+
+	views, err := k.svc(t).ListOrders(context.Background(), k.userID)
+	require.NoError(t, err)
+	require.Len(t, views, 2)
+
+	// Each order's item name comes from its own prescription, not the first one.
+	assert.Equal(t, "lisinopril", views[0].ItemName)
+	assert.Equal(t, "atorvastatin", views[1].ItemName)
+
+	// The repository decides ordering (newest first); the service must not reshuffle.
+	assert.Equal(t, k.orders[0].ID, views[0].OrderID)
+	assert.Equal(t, k.orders[1].ID, views[1].OrderID)
+
+	assert.Equal(t, order.StatusDelivered, views[0].Status)
+	assert.Equal(t, 30, views[0].Qty)
+	assert.Equal(t, time.Date(2026, 8, 2, 9, 0, 0, 0, time.UTC), views[0].PlacedAt)
+}
+
+func TestOrderService_ListOrders_UncapturedOrderKeepsNilPrice(t *testing.T) {
+	// PricePaid is nil until payment capture succeeds. It must survive as nil rather
+	// than collapsing to a zero Money — $0.00 is a legitimate captured amount, so the
+	// two cannot share a representation.
+	k := newListKit(t)
+
+	views, err := k.svc(t).ListOrders(context.Background(), k.userID)
+	require.NoError(t, err)
+	require.Len(t, views, 2)
+
+	require.NotNil(t, views[0].PricePaid)
+	assert.Equal(t, int64(26400), views[0].PricePaid.Cents())
+	assert.Nil(t, views[1].PricePaid, "an uncaptured order must not report a price")
+}
+
+func TestOrderService_ListOrders_ScopesQueryToTheCallersPrescriptions(t *testing.T) {
+	// Ownership here is enforced by construction: the only orders reachable are those
+	// hanging off prescriptions fetched for this user, so the id set is the guarantee.
+	k := newListKit(t)
+
+	_, err := k.svc(t).ListOrders(context.Background(), k.userID)
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []uuid.UUID{k.rxOne.ID, k.rxTwo.ID}, k.gotRxIDs)
+}
+
+func TestOrderService_ListOrders_NoPrescriptionsYieldsEmptyScope(t *testing.T) {
+	// A user with no prescriptions can own no orders. The empty id set is what the
+	// repository turns into "no rows" — it must never widen to every order.
+	k := newListKit(t)
+	k.rxRepo = fakePrescriptionRepo{
+		listFn: func(context.Context, uuid.UUID) ([]prescription.Prescription, error) {
+			return []prescription.Prescription{}, nil
+		},
+	}
+	k.orderRepo = fakeOrderRepo{
+		listFn: func(_ context.Context, rxIDs []uuid.UUID) ([]order.Order, error) {
+			k.gotRxIDs = rxIDs
+			return []order.Order{}, nil
+		},
+	}
+
+	views, err := k.svc(t).ListOrders(context.Background(), k.userID)
+	require.NoError(t, err)
+	assert.Empty(t, k.gotRxIDs)
+	assert.NotNil(t, views, "an empty result must marshal as [] rather than null")
+	assert.Empty(t, views)
+}
+
+func TestOrderService_ListOrders_NoOrdersYieldsEmptySlice(t *testing.T) {
+	k := newListKit(t)
+	k.orderRepo = fakeOrderRepo{
+		listFn: func(context.Context, []uuid.UUID) ([]order.Order, error) {
+			return []order.Order{}, nil
+		},
+	}
+
+	views, err := k.svc(t).ListOrders(context.Background(), k.userID)
+	require.NoError(t, err)
+	assert.NotNil(t, views, "an empty result must marshal as [] rather than null")
+	assert.Empty(t, views)
+}
+
+func TestOrderService_ListOrders_RepositoryErrorsPropagate(t *testing.T) {
+	// Neither repository failure is a client error — there is no not-found for a
+	// collection, so both surface as a generic failure the handler turns into a 500.
+	tests := map[string]func(k *listKit){
+		"prescription repository fails": func(k *listKit) {
+			k.rxRepo = fakePrescriptionRepo{
+				listFn: func(context.Context, uuid.UUID) ([]prescription.Prescription, error) {
+					return nil, errBoom
+				},
+			}
+		},
+		"order repository fails": func(k *listKit) {
+			k.orderRepo = fakeOrderRepo{
+				listFn: func(context.Context, []uuid.UUID) ([]order.Order, error) {
+					return nil, errBoom
+				},
+			}
+		},
+	}
+
+	for name, breakIt := range tests {
+		t.Run(name, func(t *testing.T) {
+			k := newListKit(t)
+			breakIt(k)
+
+			_, err := k.svc(t).ListOrders(context.Background(), k.userID)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errBoom)
+		})
+	}
 }

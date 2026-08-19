@@ -182,12 +182,12 @@ func (h *PrescriptionHandler) ListPrescriptions(
 	if err != nil {
 		return nil, err
 	}
-	resp := []openapi.PrescriptionResponse{}
+	rxList := []openapi.PrescriptionResponse{}
 	for _, rx := range prescriptions {
 		listItem := toPrescriptionResponse(rx)
-		resp = append(resp, listItem)
+		rxList = append(rxList, listItem)
 	}
-	return openapi.ListPrescriptions200JSONResponse(resp), nil
+	return openapi.ListPrescriptions200JSONResponse{Prescriptions: rxList}, nil
 }
 
 func toPrescriptionResponse(rxView inbound.PrescriptionView) openapi.PrescriptionResponse {

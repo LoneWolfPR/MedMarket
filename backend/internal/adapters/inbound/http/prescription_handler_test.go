@@ -313,11 +313,11 @@ func TestListRoute_Success(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, userID, askedID, "the authenticated user's ID should reach the service")
 
-	var resp []openapi.PrescriptionResponse
+	var resp openapi.PrescriptionListResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp, 2)
-	assert.Equal(t, "https://signed/one", resp[0].DocumentUrl)
-	assert.Equal(t, "https://signed/two", resp[1].DocumentUrl)
+	require.Len(t, resp.Prescriptions, 2)
+	assert.Equal(t, "https://signed/one", resp.Prescriptions[0].DocumentUrl)
+	assert.Equal(t, "https://signed/two", resp.Prescriptions[1].DocumentUrl)
 }
 
 func TestListRoute_ServiceErrorYields500(t *testing.T) {

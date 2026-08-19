@@ -28,6 +28,7 @@ type fakeOrderRepo struct {
 	createFn  func(ctx context.Context, o *order.Order) (*order.Order, error)
 	updateFn  func(ctx context.Context, o *order.Order) (*order.Order, error)
 	getByIDFn func(ctx context.Context, id uuid.UUID) (*order.Order, error)
+	listFn    func(ctx context.Context, rxIDs []uuid.UUID) ([]order.Order, error)
 }
 
 func (f fakeOrderRepo) Create(ctx context.Context, o *order.Order) (*order.Order, error) {
@@ -40,6 +41,12 @@ func (f fakeOrderRepo) Update(ctx context.Context, o *order.Order) (*order.Order
 
 func (f fakeOrderRepo) GetByID(ctx context.Context, id uuid.UUID) (*order.Order, error) {
 	return f.getByIDFn(ctx, id)
+}
+
+// No order activity lists orders — the method exists only to satisfy the port.
+// Leaving listFn nil means a call panics rather than passing silently.
+func (f fakeOrderRepo) List(ctx context.Context, rxIDs []uuid.UUID) ([]order.Order, error) {
+	return f.listFn(ctx, rxIDs)
 }
 
 type fakeShippingClient struct {

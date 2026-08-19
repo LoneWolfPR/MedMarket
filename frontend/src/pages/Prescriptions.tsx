@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import useAuth from '../auth/useAuth'
 import { type ReactElement } from 'react'
 import { inputClass, inputFieldGroupClass } from './sharedClasses'
-import { type ApiError, type Prescription } from '../api/types'
+import { type ApiError, type Prescription, type PrescriptionListResponse } from '../api/types'
 
 const MAX_SIZE = 10 * 1024 * 1024
 const VALID_TYPES = ['image/png', 'application/pdf', 'image/jpeg']
@@ -61,8 +61,8 @@ export default function Prescriptions() {
         throw new Error('error fetching prescriptions', { cause: e })
       }
       if (resp.ok) {
-        const rxRecords: Prescription[] = await resp.json()
-        return rxRecords
+        const body: PrescriptionListResponse = await resp.json()
+        return body.prescriptions
       } else {
         throw new Error('error fetching prescriptions')
       }
