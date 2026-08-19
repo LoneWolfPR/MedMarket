@@ -2,10 +2,10 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import useAuth from '../auth/useAuth'
 import { type ReactElement } from 'react'
 import { inputClass, inputFieldGroupClass } from './sharedClasses'
-import { type ApiError, type Prescription, type PrescriptionListResponse } from '../api/types'
+import { type Prescription, type PrescriptionListResponse } from '../api/types'
+import useAuthedApi from '../api/useAuthedApi'
 
 const MAX_SIZE = 10 * 1024 * 1024
 const VALID_TYPES = ['image/png', 'application/pdf', 'image/jpeg']
@@ -36,7 +36,6 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 
 export default function Prescriptions() {
-  const { token } = useAuth()
   const {
     register,
     handleSubmit,
@@ -46,26 +45,12 @@ export default function Prescriptions() {
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   const queryClient = useQueryClient()
+  const authedApi = useAuthedApi()
   const prescriptions = useQuery({
     queryKey: ['prescriptions'],
     queryFn: async () => {
-      let resp: Response
-      try {
-        resp = await fetch('/api/prescriptions', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-      } catch (e: unknown) {
-        console.error(e)
-        throw new Error('error fetching prescriptions', { cause: e })
-      }
-      if (resp.ok) {
-        const body: PrescriptionListResponse = await resp.json()
-        return body.prescriptions
-      } else {
-        throw new Error('error fetching prescriptions')
-      }
+      const body: PrescriptionListResponse = await authedApi('/api/prescriptions')
+      return body.prescriptions
     },
   })
 
@@ -75,23 +60,11 @@ export default function Prescriptions() {
       const formData = new FormData()
       Object.entries(fields).forEach(([name, value]) => formData.append(name, String(value)))
       formData.append('document', doc[0])
-      let resp: Response
-      try {
-        resp = await fetch('/api/prescriptions/upload', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        })
-      } catch (e: unknown) {
-        console.error(e)
-        throw new Error('error uploading prescription', { cause: e })
-      }
-      if (resp.ok) {
-        return (await resp.json()) as Prescription
-      } else {
-        const err: ApiError = await resp.json()
-        throw new Error(err.message)
-      }
+      const newRx: Prescription = await authedApi('/api/prescriptions/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      return newRx
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
