@@ -79,15 +79,17 @@ func TestSmokeJourney(t *testing.T) {
 	require.NotEmpty(t, rx.ID)
 
 	// search -> quotes, cheapest first
-	var quotes []struct {
-		OfferID    string `json:"offerId"`
-		TotalCents int64  `json:"totalCents"`
+	var search struct {
+		Quotes []struct {
+			OfferID    string `json:"offerId"`
+			TotalCents int64  `json:"totalCents"`
+		} `json:"quotes"`
 	}
 	status, body = c.postJSON("/api/prescriptions/"+rx.ID+"/search", token, nil)
 	require.Equal(t, http.StatusOK, status, "search: %s", body)
-	require.NoError(t, json.Unmarshal(body, &quotes))
-	require.NotEmpty(t, quotes, "expected at least one quote")
-	offerID := quotes[0].OfferID
+	require.NoError(t, json.Unmarshal(body, &search))
+	require.NotEmpty(t, search.Quotes, "expected at least one quote")
+	offerID := search.Quotes[0].OfferID
 	require.NotEmpty(t, offerID)
 
 	// order the cheapest offer with a Stripe test card that always succeeds

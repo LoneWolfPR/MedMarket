@@ -212,4 +212,67 @@ func TestOrderRepository(t *testing.T) {
 		require.NoError(t, err, "a failed order must not block re-ordering the offer")
 		assert.NotNil(t, retry)
 	})
+
+	// List is scoped by prescription id because orders carry no user column —
+	// ownership runs order -> prescription -> user, and the caller passes the id set
+	// it already resolved for the authenticated user.
+	t.Run("List returns only orders for the given prescriptions", func(t *testing.T) {
+		mine, err := repo.Create(ctx, newDomainOrder(t, rxID, seedOffer(t, client, rxID, pharmID)))
+		require.NoError(t, err)
+
+		// A second user's order, reachable only through their own prescription.
+		otherUserID := seedUser(t, client)
+		otherRxID := seedPrescription(t, client, otherUserID)
+		theirs, err := repo.Create(ctx,
+			newDomainOrder(t, otherRxID, seedOffer(t, client, otherRxID, pharmID)))
+		require.NoError(t, err)
+
+		got, err := repo.List(ctx, []uuid.UUID{rxID})
+		require.NoError(t, err)
+
+		ids := make([]uuid.UUID, 0, len(got))
+		for _, o := range got {
+			ids = append(ids, o.ID)
+		}
+		assert.Contains(t, ids, mine.ID)
+		assert.NotContains(t, ids, theirs.ID, "another user's order must not be reachable")
+	})
+
+	// The empty case is the one with teeth: an unfiltered query would return every
+	// order in the table, so a user with no prescriptions must short-circuit to none.
+	t.Run("List with no prescription IDs returns no orders", func(t *testing.T) {
+		got, err := repo.List(ctx, []uuid.UUID{})
+		require.NoError(t, err)
+		assert.Empty(t, got)
+
+		got, err = repo.List(ctx, nil)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("List returns newest first and populates PlacedAt", func(t *testing.T) {
+		sortRxID := seedPrescription(t, client, userID)
+		created := make([]uuid.UUID, 0, 3)
+		for range 3 {
+			o, err := repo.Create(ctx,
+				newDomainOrder(t, sortRxID, seedOffer(t, client, sortRxID, pharmID)))
+			require.NoError(t, err)
+			created = append(created, o.ID)
+		}
+
+		got, err := repo.List(ctx, []uuid.UUID{sortRxID})
+		require.NoError(t, err)
+		require.Len(t, got, 3)
+
+		// Reverse insertion order — the ORDER BY created_at DESC the API contract
+		// promises ("newest first"), not whatever order Postgres happens to return.
+		assert.Equal(t, created[2], got[0].ID)
+		assert.Equal(t, created[1], got[1].ID)
+		assert.Equal(t, created[0], got[2].ID)
+
+		// PlacedAt is the created_at column renamed at the domain boundary; if the
+		// mapper drops it, every order reports the zero time.
+		assert.False(t, got[0].PlacedAt.IsZero(), "PlacedAt must come back from created_at")
+		assert.False(t, got[0].PlacedAt.Before(got[2].PlacedAt))
+	})
 }

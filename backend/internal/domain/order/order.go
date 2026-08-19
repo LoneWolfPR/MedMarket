@@ -2,6 +2,7 @@ package order
 
 import (
 	"errors"
+	"time"
 
 	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 
@@ -18,6 +19,7 @@ type Order struct {
 	TrackingID      string
 	Qty             int
 	PricePaid       *shared.Money
+	PlacedAt        time.Time
 }
 
 //nolint:revive // self documenting

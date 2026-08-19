@@ -231,3 +231,39 @@ func (s *OrderService) GetOrderStatus(
 	}, nil
 
 }
+
+// ListOrders returns a summary of every order belonging to the caller. Ownership is
+// enforced by construction: orders are scoped to the prescriptions fetched for this
+// user, so nothing outside that set is reachable.
+func (s *OrderService) ListOrders(
+	ctx context.Context,
+	userID uuid.UUID,
+) ([]inbound.OrderSummaryView, error) {
+	rxRecords, err := s.rxRepo.List(ctx, userID)
+	if err != nil {
+		return []inbound.OrderSummaryView{}, fmt.Errorf("error fetching prescriptions for orders: %w", err)
+	}
+	rxList := make(map[uuid.UUID]string)
+	rxIDs := []uuid.UUID{}
+	for _, record := range rxRecords {
+		rxList[record.ID] = record.MedName
+		rxIDs = append(rxIDs, record.ID)
+	}
+
+	orderRecords, err := s.orderRepo.List(ctx, rxIDs)
+	if err != nil {
+		return []inbound.OrderSummaryView{}, fmt.Errorf("error fetching orders: %w", err)
+	}
+	summaries := []inbound.OrderSummaryView{}
+	for _, orderRecord := range orderRecords {
+		summaries = append(summaries, inbound.OrderSummaryView{
+			OrderID:   orderRecord.ID,
+			ItemName:  rxList[orderRecord.PrescriptionID],
+			Qty:       orderRecord.Qty,
+			Status:    orderRecord.Status,
+			PlacedAt:  orderRecord.PlacedAt,
+			PricePaid: orderRecord.PricePaid,
+		})
+	}
+	return summaries, nil
+}

@@ -20,4 +20,5 @@ type OrderRepository interface {
 	Create(ctx context.Context, o *order.Order) (*order.Order, error)
 	Update(ctx context.Context, o *order.Order) (*order.Order, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*order.Order, error)
+	List(ctx context.Context, rxIDs []uuid.UUID) ([]order.Order, error)
 }

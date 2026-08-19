@@ -3,6 +3,9 @@ package inbound
 import (
 	"context"
 	"errors"
+	"time"
+
+	"github.com/LoneWolfPR/MedMarket/backend/internal/domain/shared"
 
 	"github.com/google/uuid"
 )
@@ -37,8 +40,19 @@ type OrderStatusView struct {
 	ShippingStatus string
 }
 
+// OrderSummaryView represents the values necessary to show a summary of an order
+type OrderSummaryView struct {
+	OrderID   uuid.UUID
+	ItemName  string
+	Qty       int
+	Status    string
+	PlacedAt  time.Time
+	PricePaid *shared.Money
+}
+
 // OrderService defines the methods the service needs to implement
 type OrderService interface {
 	PlaceOrder(ctx context.Context, i OrderInput) (OrderView, error)
 	GetOrderStatus(ctx context.Context, userID, orderID uuid.UUID) (OrderStatusView, error)
+	ListOrders(ctx context.Context, userID uuid.UUID) ([]OrderSummaryView, error)
 }

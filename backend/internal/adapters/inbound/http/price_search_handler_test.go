@@ -129,8 +129,9 @@ func TestSearchRoute_Success(t *testing.T) {
 	assert.Equal(t, userID, gotUserID)
 	assert.Equal(t, rxID, gotRxID, "the {id} path parameter should be bound and forwarded")
 
-	var resp []openapi.QuoteResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	var envelope openapi.QuoteListResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &envelope))
+	resp := envelope.Quotes
 	require.Len(t, resp, 2)
 
 	// Order is preserved and every field is mapped off the view.
@@ -161,7 +162,7 @@ func TestSearchRoute_NoQuotesYieldsEmptyJSONArray(t *testing.T) {
 		http.Header{"Authorization": {"Bearer any-token"}})
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	assert.JSONEq(t, `[]`, rec.Body.String())
+	assert.JSONEq(t, `{"quotes":[]}`, rec.Body.String())
 }
 
 func TestSearchRoute_ServiceErrorsMapToStatus(t *testing.T) {

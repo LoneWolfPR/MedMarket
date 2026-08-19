@@ -128,3 +128,40 @@ func (h *OrderHandler) GetOrderStatus(
 
 	return openapi.GetOrderStatus200JSONResponse(resp), nil
 }
+
+// ListOrders returns the authenticated user's orders, newest first
+func (h *OrderHandler) ListOrders(
+	ctx context.Context,
+	_ openapi.ListOrdersRequestObject,
+) (openapi.ListOrdersResponseObject, error) {
+	userID, ok := getUserIDKeyValue(ctx)
+	if !ok {
+		return openapi.ListOrders401JSONResponse{
+			UnauthorizedJSONResponse: unauthorizedBody(),
+		}, nil
+	}
+
+	orderSummaryViews, err := h.svc.ListOrders(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	orderList := []openapi.OrderSummaryResponse{}
+	for _, summary := range orderSummaryViews {
+		orderSummary := openapi.OrderSummaryResponse{
+			ItemName: summary.ItemName,
+			OrderId:  summary.OrderID,
+			PlacedAt: summary.PlacedAt,
+			Quantity: summary.Qty,
+			Status:   summary.Status,
+		}
+		if summary.PricePaid != nil {
+			orderSummary.PricePaidCents = ptr.To(summary.PricePaid.Cents())
+		}
+		orderList = append(orderList, orderSummary)
+	}
+	resp := openapi.OrderListResponse{
+		Orders: orderList,
+	}
+	return openapi.ListOrders200JSONResponse(resp), nil
+}

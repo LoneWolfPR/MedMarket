@@ -58,11 +58,11 @@ func (h *PriceSearchHandler) SearchPrescriptionPrices(
 		}
 		return nil, err
 	}
-	resp := []openapi.QuoteResponse{}
+	quoteList := []openapi.QuoteResponse{}
 	for _, quote := range quotes {
-		resp = append(resp, toQuoteResponse(quote))
+		quoteList = append(quoteList, toQuoteResponse(quote))
 	}
-	return openapi.SearchPrescriptionPrices200JSONResponse(resp), nil
+	return openapi.SearchPrescriptionPrices200JSONResponse{Quotes: quoteList}, nil
 }
 
 func toQuoteResponse(quote inbound.QuoteView) openapi.QuoteResponse {
