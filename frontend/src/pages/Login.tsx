@@ -2,20 +2,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import useAuth from '../auth/useAuth'
-import { useLocation, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { inputClass } from './sharedClasses'
-import { useMutation } from '@tanstack/react-query'
-
-function isValidRedirect(state: unknown): state is { from: string } {
-  return (
-    typeof state === 'object' &&
-    state !== null &&
-    'from' in state &&
-    typeof state.from === 'string' &&
-    state.from.startsWith('/') &&
-    !state.from.startsWith('//')
-  )
-}
+import { readRedirect } from '../auth/locationState'
 
 const schema = z.object({
   email: z.string().email('Enter a valid email'),
@@ -28,6 +17,7 @@ function Login() {
   const navigate = useNavigate()
   const { state: locState } = useLocation()
   const { login } = useAuth()
+  const from = readRedirect(locState)
 
   const {
     register,
@@ -36,17 +26,10 @@ function Login() {
     setError,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
-  const loginMutation = useMutation({
-    mutationFn: async ({ email, password }: FormValues) => {
-      return login(email, password)
-    },
-  })
-
   const onSubmit = async (values: FormValues) => {
     try {
-      await loginMutation.mutateAsync(values)
-      const dest = isValidRedirect(locState) ? locState.from : '/'
-      navigate(dest, { replace: true })
+      await login(values.email, values.password)
+      navigate(from ?? '/', { replace: true })
     } catch (e: unknown) {
       if (e instanceof Error) {
         setError('root', { message: e.message })
@@ -58,9 +41,12 @@ function Login() {
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-6 max-w-sm mx-auto">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-6 max-w-sm mx-auto flex flex-col gap-4">
       <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Login</h1>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+        {locState?.registered && !errors.root && (
+          <p className="text-sm text-emerald-600">Account created &mdash; please sign in</p>
+        )}
         {errors.root && <p className="text-sm text-red-600">{errors.root.message}</p>}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="email" className="text-sm font-medium text-slate-700">
@@ -73,7 +59,7 @@ function Login() {
             {...register('email')}
             className={inputClass}
           />
-          {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
+          {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="password" className="text-sm font-medium text-slate-700">
@@ -86,7 +72,7 @@ function Login() {
             {...register('password')}
             className={inputClass}
           />
-          {errors.password && <p className="text-sm text-red-600">{errors.password.message}</p>}
+          {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
         </div>
         <button
           type="submit"
@@ -95,6 +81,16 @@ function Login() {
         >
           {isSubmitting ? 'Signing in...' : 'Sign in'}
         </button>
+        <p className="text-sm text-slate-600">
+          Don't have an account?{' '}
+          <Link
+            to="/register"
+            state={{ from }}
+            className="font-medium text-teal-600 hover:text-teal-700 hover:underline"
+          >
+            Register
+          </Link>
+        </p>
       </form>
     </div>
   )
