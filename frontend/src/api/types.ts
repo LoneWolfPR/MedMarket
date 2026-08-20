@@ -16,3 +16,29 @@ export type PrescriptionListResponse = { prescriptions: Prescription[] }
 export type TokenResponse = { token: string }
 
 export type ApiError = { message?: string }
+
+export type RegisterRequest = {
+  firstName: string
+  lastName: string
+  email: string
+  password: string
+  phone?: string
+  address?: Address
+}
+
+export type UserResponse = {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  phone?: string
+  address?: Address
+}
+
+export type Address = {
+  street1: string
+  street2?: string
+  city: string
+  state: string
+  zip: string
+}

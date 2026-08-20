@@ -156,20 +156,109 @@ The empty state is a designed state, not a blank page — see rule 5.
 Single column, `gap-4` between fields. Label above input, `gap-1.5` between
 them. Submit button full-width on mobile, auto width from `sm:` up.
 
-**Panel width.** A standalone form panel (login, register) is `max-w-sm`,
-horizontally centered with `mx-auto`. Forms embedded in a page take the page
+**Panel width.** A standalone form panel is centered with `mx-auto` and sized to
+its content, not to the viewport. A short single-column form — login, a
+confirmation — is `max-w-sm`. A form that earns multiple columns, like register
+with its name row and its city/state/zip row, is `max-w-2xl`: wide enough that a
+two-column grid doesn't crush its fields, narrow enough that a name input isn't
+stretched across the full page column. Forms embedded in a page take the page
 column's width.
-
-Width follows content, not the viewport:
 
 | Content | Width |
 | --- | --- |
 | Single-column form | `max-w-sm` – `max-w-md` |
+| Multi-column form panel | `max-w-2xl` |
 | Prose | `max-w-prose` (65ch) |
 | Page / app content column | `max-w-5xl` |
 
+**Panel heading.** The panel's `h1` is a sibling of the `<form>`, so the form's
+`gap-4` doesn't apply to it — give the panel itself a flex column with the same
+`gap-4`, or the heading sits flush against the first field.
+
 Form-level error messages sit above the first field: `text-sm` `red-600`.
 Field-level errors sit below their input: `text-xs` `red-600`.
+
+A form-level **notice** — a success or informational message carried in from
+another page, like "Account created — please sign in" — occupies that same slot
+above the first field, `text-sm` `emerald-600`. One slot, so the form doesn't
+reflow depending on which message appears. A notice and an error are mutually
+exclusive: the notice says what to do next, the error says the last attempt
+failed, and once there's an error the notice has been overtaken. Show the error
+and drop the notice.
+
+**Field hints.** A rule the user needs *before* typing — a password policy, an
+accepted format — goes between the label and the input, `text-xs` `slate-400`.
+Above the input, not below the error: the constraint is guidance, so it should
+be read on the way into the field rather than discovered underneath it, and it
+keeps the error message directly under the control it belongs to. Order is
+always **label → hint → input → error**.
+
+**That ordering assumes one field per row.** A hint inside a grid cell pushes
+that cell's input down, and the field beside it no longer lines up — errors are
+exempt because they sit *below* the input, so the row grows without moving
+anything. When a hinted field shares a row, lift the hint out and put it above
+the whole row as a group hint, so every cell keeps the same
+label → input → error shape. Point each affected control's `aria-describedby` at
+it; a rule stated once above a pair still governs both of them.
+
+**A group hint must be bound to its group by spacing.** Dropped straight into a
+form on the form's own `gap-4`, it has equal air above and below and reads as
+belonging to neither the section before it nor the one after — a floating
+sentence. Wrap the hint and the fields it describes in a container at `gap-1.5`,
+the same distance a label sits from its input, and let that whole unit take the
+form's normal spacing. Where the group has its own internal rhythm, nest it:
+outer wrapper at `gap-1.5` holding the hint plus an inner container at `gap-4`
+holding the fields. Proximity is the only thing telling a reader what a hint
+belongs to, so it has to be closer to its group than the group is to its
+neighbors.
+
+State the rule in prose, not as a pattern dump. "8–32 characters with an
+uppercase letter, a lowercase letter, a number, and a symbol. No spaces." tells
+someone what to do; an enumerated list of every legal punctuation mark does not.
+If a set is small and surprising, name it; if it's large and unsurprising,
+describe it and name only the exclusion.
+
+**Required fields.** Mark them with an asterisk at the end of the label, and put
+a `* Required` key above the first field — between the page title and the form,
+`text-xs`. The key goes *above* because a legend explaining a notation is no use
+after the reader has already met the notation and guessed at it. Keep the key
+tight to the title (`gap-1`) rather than on the panel's own rhythm, so it reads
+as an annotation on the heading and not as a section of its own.
+
+The asterisk is **`slate-500`, not `red-600`**. Red is reserved for errors and
+destructive actions; if required markers are red, a form with nothing wrong
+still reads as a form full of problems. The marker's job is to be catchable on a
+scan, not to signal danger. Use the same `slate-500` for the key.
+
+The asterisk is decoration, so the *state* has to be carried separately: put
+`required` on the control and `aria-hidden="true"` on the asterisk. A bare `*` is
+either skipped or read aloud as "star," so on its own it tells a screen-reader
+user nothing. Pair it with `noValidate` on the form — the attribute then exposes
+the requirement to assistive tech without handing validation back to the browser,
+which keeps the schema the single source of truth.
+
+**Conditionally-required groups** don't fit this convention and shouldn't be
+forced into it. Where a set of fields is optional as a whole but mandatory once
+any one of them is touched — a postal address, a payment method — an asterisk on
+each is a lie and no asterisk is misleading. State it once at the group instead,
+as a hint above the group's first control: the group is optional, and entering
+any of it means entering all of it apart from the genuinely optional members.
+Leave the individual labels unmarked and let the validator enforce the rule.
+
+#### Field accessibility
+
+Every control carries `aria-invalid` reflecting its error state, and
+`aria-describedby` pointing at whatever text explains it — the hint, the error,
+or both. `aria-describedby` takes a space-separated list read in order, so a
+field with a persistent hint keeps that id and appends the error id only while
+the error is showing. When there is nothing to describe, omit the attribute
+rather than pointing at an id that isn't rendered.
+
+Field errors do **not** get `role="alert"`. A failed submit moves focus to the
+first invalid control, and its `aria-describedby` is announced on arrival, so an
+alert role would say the same thing twice. The form-level error is the exception:
+it belongs to no control and would otherwise never be announced, so it takes
+`role="alert"`.
 
 #### Field rows
 
