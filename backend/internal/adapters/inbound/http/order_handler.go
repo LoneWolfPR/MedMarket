@@ -74,6 +74,12 @@ func (h *OrderHandler) CreateOrder(
 					Message: inbound.ErrOfferExpired.Error(),
 				},
 			}, nil
+		case errors.Is(err, inbound.ErrNoValidAddress):
+			return openapi.CreateOrder400JSONResponse{
+				BadRequestJSONResponse: openapi.BadRequestJSONResponse{
+					Message: inbound.ErrNoValidAddress.Error(),
+				},
+			}, nil
 		// The user id came from a verified token, so a missing user means the
 		// account was deleted while the token is still live — an auth failure,
 		// not a server fault.

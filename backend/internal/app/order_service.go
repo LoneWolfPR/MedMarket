@@ -137,6 +137,11 @@ func (s *OrderService) PlaceOrder(ctx context.Context, i inbound.OrderInput) (in
 	if time.Now().After(offerRecord.ExpiresAt) {
 		return inbound.OrderView{}, inbound.ErrOfferExpired
 	}
+
+	// validate user's shipping address
+	if !userRecord.Address.IsValid() {
+		return inbound.OrderView{}, inbound.ErrNoValidAddress
+	}
 	// Fetch pharmacy
 	pharmRecord, err := s.pharmRepo.GetByID(ctx, offerRecord.Quote.PharmacyID())
 	if err != nil {
