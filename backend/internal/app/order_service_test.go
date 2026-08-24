@@ -346,6 +346,58 @@ func TestOrderService_PlaceOrder_ExpiredOffer(t *testing.T) {
 	require.ErrorIs(t, err, inbound.ErrOfferExpired)
 }
 
+// userWithAddress rebuilds the kit's user carrying the given address, so a test
+// can vary only the field under examination.
+func (k *orderKit) userWithAddress(t *testing.T, addr shared.Address) fakeUserRepo {
+	t.Helper()
+	usr := makeStoredUser(t, "jane@example.com")
+	usr.ID = k.input.UserID
+	usr.Address = addr
+	return happyUser(usr)
+}
+
+func TestOrderService_PlaceOrder_InvalidAddress(t *testing.T) {
+	// Street2 is the only optional field, so dropping any of the other four is
+	// enough on its own to fail the gate.
+	tests := map[string]shared.Address{
+		"no address at all": {},
+		"missing street1":   {City: "Springfield", State: "IL", Zip: "62704"},
+		"missing city":      {Street1: "100 Market St", State: "IL", Zip: "62704"},
+		"missing state":     {Street1: "100 Market St", City: "Springfield", Zip: "62704"},
+		"missing zip":       {Street1: "100 Market St", City: "Springfield", State: "IL"},
+	}
+	for name, addr := range tests {
+		t.Run(name, func(t *testing.T) {
+			k := newOrderKit(t)
+			k.usr = k.userWithAddress(t, addr)
+
+			_, err := k.svc(t).PlaceOrder(context.Background(), k.input)
+			require.ErrorIs(t, err, inbound.ErrNoValidAddress)
+		})
+	}
+}
+
+func TestOrderService_PlaceOrder_InvalidAddressWritesNothing(t *testing.T) {
+	// The gate is a precondition, not a late failure. Running it after the insert
+	// would leave an orphaned order that the partial unique index then treats as
+	// active, permanently answering 409 for every retry of the same offer.
+	k := newOrderKit(t)
+	k.usr = k.userWithAddress(t, shared.Address{})
+
+	var created bool
+	k.ord = fakeOrderRepo{
+		createFn: func(_ context.Context, o *order.Order) (*order.Order, error) {
+			created = true
+			return o, nil
+		},
+	}
+
+	_, err := k.svc(t).PlaceOrder(context.Background(), k.input)
+	require.ErrorIs(t, err, inbound.ErrNoValidAddress)
+	assert.False(t, created, "no order row may be written before the address gate")
+	assert.Nil(t, k.gotReq, "no workflow may start")
+}
+
 func TestOrderService_PlaceOrder_PharmacyFetchErrorIsGeneric(t *testing.T) {
 	k := newOrderKit(t)
 	k.pharm = fakePharmacyRepo{

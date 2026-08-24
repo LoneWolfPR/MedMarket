@@ -1,11 +1,12 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ReactElement } from 'react'
 import { inputClass, inputFieldGroupClass } from './sharedClasses'
-import { type Prescription, type PrescriptionListResponse } from '../api/types'
+import { type Prescription } from '../api/types'
 import useAuthedApi from '../api/useAuthedApi'
+import usePrescriptions from '../api/usePrescriptions'
 
 const MAX_SIZE = 10 * 1024 * 1024
 const VALID_TYPES = ['image/png', 'application/pdf', 'image/jpeg']
@@ -43,16 +44,9 @@ export default function Prescriptions() {
     formState: { errors, isSubmitting },
     setError,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
-
-  const queryClient = useQueryClient()
   const authedApi = useAuthedApi()
-  const prescriptions = useQuery({
-    queryKey: ['prescriptions'],
-    queryFn: async () => {
-      const body: PrescriptionListResponse = await authedApi('/api/prescriptions')
-      return body.prescriptions
-    },
-  })
+  const queryClient = useQueryClient()
+  const prescriptions = usePrescriptions()
 
   const uploadMutation = useMutation({
     mutationFn: async (fv: FormValues) => {
@@ -111,14 +105,22 @@ export default function Prescriptions() {
               <p className="text-sm text-slate-600">Prescribed by: {rx.physicianName}</p>
               <p className="text-xs text-slate-400">Qty: {rx.quantity}</p>
             </div>
-            <a
-              href={rx.documentUrl}
-              rel="noopener noreferrer"
-              target="_blank"
-              className="text-sm font-medium text-teal-600 hover:text-teal-700 hover:underline"
-            >
-              View document
-            </a>
+            <div className="flex items-center gap-3">
+              <a
+                href={rx.documentUrl}
+                rel="noopener noreferrer"
+                target="_blank"
+                className="text-sm font-medium text-teal-600 hover:text-teal-700 hover:underline"
+              >
+                View document
+              </a>
+              <a
+                href={`/prescriptions/${rx.id}/search`}
+                className="bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700 focus:outline-hidden focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
+              >
+                Find Prices
+              </a>
+            </div>
           </li>
         ))}
       </ul>

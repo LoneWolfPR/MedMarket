@@ -20,6 +20,7 @@ type OrderView struct {
 
 //nolint:revive // sentinel error
 var (
+	ErrNoValidAddress     = errors.New("no valid shipping address on file")
 	ErrOfferExpired       = errors.New("offer is expired")
 	ErrOfferNotFound      = errors.New("offer not found")
 	ErrOrderAlreadyPlaced = errors.New("order already placed")
