@@ -42,3 +42,16 @@ export type Address = {
   state: string
   zip: string
 }
+
+export type PriceQuote = {
+  offerId: string
+  pharmacyId: string
+  pharmacyName: string
+  pharmacyItemId: string
+  unitPriceCents: number
+  totalCents: number
+}
+
+export type PriceQuoteResponse = {
+  quotes: PriceQuote[]
+}

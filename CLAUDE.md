@@ -5,7 +5,7 @@ Prescription price comparison platform. Monorepo with Go backend, React frontend
 ## Documentation map
 
 - `implementation-plan.md` (repo root) — the day-by-day plan.
-- `docs/progress-log.md` — **the full chronological build log.** Every session, decision, and gotcha, in detail. Not loaded into context; read it (grep it) when you need the reasoning behind a past decision. This file holds only what still governs work.
+- `docs/progress-log.md` — **the full chronological build log.** Every session, decision, and gotcha, in detail. Not loaded into context; read it (grep it) when you need the reasoning behind a past decision. **New session notes are appended there, not here** — this file holds only what still governs work, and its "Current state" below gets a couple of lines only when the headline changes.
 - `docs/hexagonal.md` — the architecture rules, ratified in the 2026-08-04 consolidation review.
 - `docs/design.md` — the visual spec Claude writes and the user implements.
 - `docs/deploy.md` — first-bring-up runbook. `README.md` has environment setup + deliberate simplifications.
@@ -35,11 +35,13 @@ Claude does scaffolding and boilerplate that the user reviews; the user writes t
 
 **Backend: feature-complete and deployed.** Auth, prescriptions (upload → GCS/MinIO → Postgres), pharmacy search via Temporal workflow, the full order saga (Stripe authorize → place → capture, shipping webhooks via signal, live status via query with Postgres fallback), OpenTelemetry traces + logs, Swagger UI, graceful shutdown, request logging. Hexagonal consolidation review complete. Deployed to GKE staging via keyless CI/CD (Workload Identity Federation); cluster is parked at 0 nodes when idle.
 
-**Frontend: in progress** (sessions 1–6). Done: app shell + routing, auth context with JWT `exp` checking, protected routes, login, registration (RHF + Zod), prescriptions list + upload, TanStack Query, Vitest suite (84 tests). Current branch `feat/registration`.
+**Frontend: in progress.** Done: app shell + routing, auth context with JWT `exp` checking, protected routes, login, registration (RHF + Zod), prescriptions list + upload, TanStack Query, a not-found route, `formatCents`, Vitest suite (91 tests).
+
+**In flight — price search → order placement** (`feat/search-and-order-updates`), the headline vertical slice and the last major gap in the UI. `/prescriptions/:id/search` holds a three-step state (`quotes` → `confirm` → `placed`). The quotes step is done; the confirm and placed steps are next, along with the profile query behind the address gate. Screen specs are in `docs/design.md`; the session detail is in `docs/progress-log.md`.
 
 **Deferred / known work**
 
-- **Backend — missing-address precondition.** A user can register with no address, but `order.NewPlacementRequest` requires `Address.IsValid()`, and that check runs *after* the order row is written → 500, orphaned `placed` order, then permanent 409 on retry (partial unique index on `offer_id`). Fix: precondition check before any writes, beside the offer-expiry gate — new `inbound` sentinel, service check, handler case (`createOrder` already declares a 400). Do not type the rest of `NewPlacementRequest`'s errors; the address is the only field sourced from user-editable data.
+- **CI — path-filtered checks.** Backend and frontend jobs should only run when their own paths change. Use `dorny/paths-filter` inside an always-running job and gate the expensive steps on its output; **not** workflow-level `on.pull_request.paths`, which leaves a required status check pending forever on protected `main` and makes the PR unmergeable.
 - **Frontend — `openapi-typescript` generation** from `backend/api/api.yaml` to replace the hand-written `src/api/types.ts`.
 - **Frontend — `<Field>` component extraction** (eleven near-identical label/input/error blocks; unblocked now that the field anatomy has settled), and `Login`'s aria wiring, which waits on it.
 - **Frontend — test coverage is starter-level.** `useAuthedApi` (including its 401 branch) and `Prescriptions.tsx` have none.
