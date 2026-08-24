@@ -341,6 +341,102 @@ Inline pill: `rounded-full`, `px-2 py-0.5`, `text-xs` `font-medium`, tinted
 background with a darker text of the same hue — `emerald` delivered, `teal`
 confirmed/shipped, `amber` pending, `red` failed, `slate` unknown.
 
+### Money
+
+Always rendered from cents, never from a float. `$12.99` — two decimal places
+always, including `$12.00`, and a thousands separator above `$999`. One shared
+formatter; no per-component arithmetic.
+
+A **total** is heavier than the unit price it derives from: `text-lg`
+`font-semibold` `slate-900` against `text-sm` `slate-600`. The reader should be
+able to find the number they're committing to without reading the label.
+
+### Quote card
+
+Same wide, low-density row as the prescription card, and for the same reason —
+one card per quote, single column, full content width. The backend returns them
+cheapest first; **preserve that order**, and never re-sort client-side.
+
+Left block:
+
+| Line | Content | Style |
+| --- | --- | --- |
+| Title | Pharmacy name | `text-base` `font-medium` `slate-900` |
+| Detail | "{unit price} each × {qty}" | `text-sm` `slate-600` |
+
+Right: the total, then the Order button, side by side and vertically centered.
+This is a **primary button**, not a text link — the prescription card's document
+link is a side errand, whereas this is the action the page exists for, and the
+weight should say so.
+
+The first card carries a **`Best price` status badge** in `emerald`, inline after
+the pharmacy name. It's only honest because the ordering is a backend guarantee;
+if that ever stops being true, the badge goes.
+
+On small screens the right side drops below the left rather than crushing it,
+with the total and button on one row.
+
+### Order confirmation panel
+
+Replaces the quote list in place (see "Page composition — a step within a page").
+A `p-6` card, `max-w-2xl mx-auto`, holding a summary and two actions.
+
+The summary is a **description list**, not a form and not a table — label left in
+`text-sm` `slate-600`, value right in `text-sm` `slate-900`, one row per line,
+`gap-3`. Rows: medication (name + strength), quantity, pharmacy, price each, and
+the shipping address. The **total** sits apart from the list, separated by a
+`slate-200` top border with `pt-4` above it, using the heavier money treatment —
+it is the one number the user is actually agreeing to.
+
+The shipping address renders as its own block within its row, street on one line,
+"{city}, {state} {zip}" on the next.
+
+Actions sit in a row at the bottom, `gap-3`, right-aligned from `sm:` up and
+full-width stacked below it: **Confirm** as primary, **Cancel** as secondary
+(and note the surface caveat — this is a white card, so Cancel takes the
+`slate-100` fill, not the white-with-border variant).
+
+While the order is in flight the primary button shows a pending label and both
+buttons disable — a double-submitted order is a real order.
+
+### Blocking notice — action unavailable
+
+When the user can't take an action until they fix something elsewhere, the
+confirm affordance is **replaced** by a notice, not accompanied by a disabled
+button. A disabled button with no explanation is a dead end; the notice explains
+and offers the way out.
+
+`amber-50` background, `amber-200` border, `rounded-lg`, `p-4`. One line of
+`text-sm` `amber-900` stating the problem in the user's terms — not the API's —
+followed by a link to where it gets fixed, in the standard link treatment. The
+Cancel action stays, so the user is never trapped in the step.
+
+Carries `role="alert"`: it appears in response to the user's action and changes
+what they can do next.
+
+The notice is a **client-side courtesy**. The server rejects the same case with a
+`400` regardless, and that response still has to be handled — see rule 7.
+
+### Page composition — a step within a page
+
+When a flow has a second step that depends entirely on data the first step is
+holding, render it as a step **within the same route**, not a new one. The list
+is replaced by the step; the page title stays.
+
+Use this when the step's data can't be re-fetched on its own — a confirmation
+built from a search result that has no endpoint of its own can't survive a
+refresh at a URL of its own, so giving it a URL promises something it can't keep.
+Reach for a real route when the step is independently addressable.
+
+Cancel returns to the previous step and nothing else — it is not a navigation.
+
+### Not-found page
+
+Any URL that matches no route gets a real page, not an empty shell: the page
+title treatment, one line of `slate-600` explaining the page doesn't exist, and a
+link back to the home page. A blank content area under a working header reads as
+a bug, because it usually is one.
+
 ---
 
 ## 4. Rules that hold everywhere
@@ -357,3 +453,13 @@ confirmed/shipped, `amber` pending, `red` failed, `slate` unknown.
    design is wrong, not the scale.
 5. **Loading and empty states are part of the design**, not an afterthought.
    Every list has an empty state; every async action has a pending state.
+6. **Never auto-redirect a user out of what they were doing.** When they can't
+   proceed, say why and link to the fix. Bouncing someone mid-task discards
+   their intent and their context, and it steals the Back button — they landed
+   somewhere they didn't choose. This holds even once the destination page
+   exists and the redirect would "work."
+7. **A client-side check is UX; the server is the authority.** Checking before
+   you call saves a pointless round-trip and gives a better message, but the
+   server rejects the case regardless and that rejection still needs handling.
+   Two code paths, deliberately — never delete the second because the first
+   makes it hard to reach.
