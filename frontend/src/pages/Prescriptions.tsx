@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ReactElement } from 'react'
+import { Link } from 'react-router'
 import { inputClass, inputFieldGroupClass } from './sharedClasses'
 import { type Prescription } from '../api/types'
 import useAuthedApi from '../api/useAuthedApi'
@@ -114,12 +115,11 @@ export default function Prescriptions() {
               >
                 View document
               </a>
-              <a
-                href={`/prescriptions/${rx.id}/search`}
-                className="bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700 focus:outline-hidden focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
+              <Link to={`/prescriptions/${rx.id}/search`}
+                className="bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700 focus:outline-hidden focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
               >
                 Find Prices
-              </a>
+              </Link>
             </div>
           </li>
         ))}

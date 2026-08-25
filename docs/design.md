@@ -507,11 +507,21 @@ rhythm as the details.
 The shipping address `<dd>` holds two lines — street, then
 "{city}, {state} {zip}" — so it needs `flex flex-col` to stack them.
 
+When there is no address on file, the row is **omitted entirely** rather than
+shown with an empty or placeholder `<dd>`. The blocking notice below states the
+same fact in plainer words, so a stub row would only say it twice, less clearly.
+
 Actions row: `flex flex-col gap-3 sm:flex-row sm:justify-end` — full-width
 stacked on small screens, right-aligned from `sm:` up. **Cancel** first,
 **Confirm** last (primary rightmost, same reasoning as the prescription card).
 Cancel takes the **white-card** secondary variant — `bg-slate-100`, hover
 `bg-slate-200`, no border — per the surface caveat.
+
+When the order is blocked (see "Blocking notice"), the notice is its **own
+full-width row between the total and the actions row** — it is prose plus a
+link, not a control, and does not belong in a right-aligned row of buttons. The
+actions row stays where it is and holds Cancel alone, which the existing
+`sm:justify-end` right-aligns without change.
 
 While the order is in flight the primary button shows a pending label and both
 buttons disable — a double-submitted order is a real order.
@@ -519,9 +529,10 @@ buttons disable — a double-submitted order is a real order.
 ### Blocking notice — action unavailable
 
 When the user can't take an action until they fix something elsewhere, the
-confirm affordance is **replaced** by a notice, not accompanied by a disabled
-button. A disabled button with no explanation is a dead end; the notice explains
-and offers the way out.
+confirm affordance is **withheld** and a notice explains why, rather than a
+disabled button sitting there with no explanation — a dead end. Withheld, not
+swapped in place: the button is simply not rendered, and the notice occupies its
+own block above the actions row. The two never trade DOM positions.
 
 ```
 bg-amber-50 border border-amber-200 rounded-lg p-4 flex flex-col gap-2
@@ -532,7 +543,8 @@ terms — not the API's — then a link to where it gets fixed, using the text-l
 treatment from the prescription card (`text-sm font-medium text-teal-600
 underline hover:text-teal-700` plus the focus ring).
 
-The Cancel action stays, so the user is never trapped in the step.
+The Cancel action stays in the actions row, so the user is never trapped in the
+step.
 
 Carries `role="alert"`: it appears in response to the user's action and changes
 what they can do next.

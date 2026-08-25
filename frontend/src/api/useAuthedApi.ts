@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import useAuth from '../auth/useAuth'
 import { type ApiError } from './types'
+import ApiResponseError from './ApiResponseError'
 
 export default function useAuthedApi() {
   const { token, logout } = useAuth()
@@ -26,7 +27,7 @@ export default function useAuthedApi() {
       } else {
         if (resp.status === 401) {
           logout()
-          throw new Error('unauthorized')
+          throw new ApiResponseError('unauthorized', 401)
         }
         let error: ApiError
         try {
@@ -36,9 +37,9 @@ export default function useAuthedApi() {
           throw new Error('error making request', { cause: e })
         }
         if (error.message) {
-          throw new Error(error.message)
+          throw new ApiResponseError(error.message, resp.status)
         }
-        throw new Error(`error making request with status: ${resp.status}`)
+        throw new ApiResponseError('error making request', resp.status)
       }
     },
     [token, logout],

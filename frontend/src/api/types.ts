@@ -55,3 +55,15 @@ export type PriceQuote = {
 export type PriceQuoteResponse = {
   quotes: PriceQuote[]
 }
+
+export type OrderRequest = {
+  offerId: string
+  paymentMethod: string
+}
+
+export type OrderResponse = {
+  orderId: string
+  itemName: string
+  quantity: number
+  status: string
+}
