@@ -1,8 +1,9 @@
-import { ReactElement } from 'react'
+import { type ReactElement } from 'react'
 import { Link } from 'react-router'
 import { type OrderResponse, type Prescription, type PriceQuote } from '../api/types'
 import useProfile from '../api/useProfile'
 import { formatCents } from '../api/money'
+import useCreateOrder from '../api/useCreateOrder'
 
 const dlRowClasses = 'flex justify-between gap-4'
 const dtClasses = 'text-sm text-slate-600'
@@ -17,6 +18,7 @@ type ConfirmOrderProps = {
 
 export default function ConfirmOrder({ rx, quote, onCancel, onPlaced }: ConfirmOrderProps) {
   const profile = useProfile()
+  const createOrder = useCreateOrder()
 
   let confirmState: ReactElement
   if (profile.isPending) {
@@ -72,12 +74,18 @@ export default function ConfirmOrder({ rx, quote, onCancel, onPlaced }: ConfirmO
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <button className="bg-slate-100 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-slate-200 focus:outline-hidden focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
             onClick={() => { onCancel() }}
+            disabled={createOrder.isPending}
           >
             Cancel
           </button>
           {address &&
             <button className="bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700 focus:outline-hidden focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
+              onClick={() => {
+                createOrder.mutate(quote.offerId, { onSuccess: onPlaced })
+              }}
+              disabled={createOrder.isPending}
             >
+              { createOrder.isPending ? 'Confirm' : 'Placing order...'}
               Confirm
             </button>}
         </div>

@@ -552,6 +552,73 @@ what they can do next.
 The notice is a **client-side courtesy**. The server rejects the same case with a
 `400` regardless, and that response still has to be handled — see rule 7.
 
+### Order failure — inline error in a step
+
+A failed order attempt does **not** replace the confirmation panel. The panel
+stays, holding everything the user already agreed to, and the failure appears in
+the same full-width slot the blocking notice uses — between the total and the
+actions row, carrying `role="alert"`.
+
+Two treatments, chosen by whether the user can do something about it:
+
+**Recoverable** — the same amber notice as "Blocking notice — action
+unavailable", verbatim classes, one line of plain-language cause plus the route
+out. The route out is a `<button>` when it acts on this page and a `Link` when it
+sends the user elsewhere, styled with the text-link treatment either way
+(`text-sm font-medium text-teal-600 underline hover:text-teal-700` plus the focus
+ring).
+
+**Unrecoverable** — one line at `text-sm text-red-600`, generic copy, no action.
+Matches the list-page error state; never render a raw exception message.
+
+| Server says | Treatment | Copy | Route out |
+| --- | --- | --- | --- |
+| `410` — the offer expired | Amber | "This price is no longer available. Prices are held for 15 minutes." | Button: "Search again" |
+| `400` — no shipping address | Amber | "Add a shipping address before ordering." | Link to `/profile`: "Edit profile" |
+| `409` — already ordered | Amber | "You've already placed an order for this prescription." | Link to `/prescriptions`: "Back to prescriptions" |
+| `404`, anything else | Red | "Something went wrong placing your order." | None |
+
+The `400` case is the server half of rule 7 — the amber notice the client
+already shows for a missing address, reached by the other code path. Same
+words, so the user can't tell which check caught it.
+
+"Search again" returns to the quotes step **and discards the cached search** —
+returning to a list of expired offers would just fail again. Cancel stays
+available in the actions row throughout.
+
+### Order placed panel
+
+Replaces the confirmation panel in place. Same card shell, so the page doesn't
+jump: the standard Card classes at `p-6`, plus `max-w-2xl mx-auto flex flex-col
+gap-6`.
+
+Header row: `flex items-center gap-2`. A line at `text-base font-medium
+text-slate-900` reading "Order placed", then the status badge for the returned
+status — `Pending, placed` is the amber variant.
+
+The summary is a `<dl>` with the same treatment as the confirmation panel — `flex
+flex-col gap-3` on the list, `flex justify-between gap-4` per row, `<dt>` at
+`text-sm text-slate-600`, `<dd>` at `text-sm text-slate-900 text-right`. Rows, in
+order: order number, medication, quantity.
+
+The order number is the one thing on this panel the user might copy or quote back
+to support, so its `<dd>` also takes `font-mono text-xs break-all` — a uuid at
+`text-sm` wraps badly in a right-aligned cell.
+
+Below the list, one line at `text-sm text-slate-600` saying what happens next in
+the user's terms — the pharmacy confirms and ships, and status updates land on
+the order.
+
+Actions row: `flex flex-col gap-3 sm:flex-row sm:justify-end`, holding a single
+**Back to prescriptions** `Link` styled as the secondary button (the white-card
+variant — `bg-slate-100`, hover `bg-slate-200`, no border), since it sits on a
+white card.
+
+**No Cancel, and no way back to the quotes.** The order exists; offering a step
+backward would imply it can be undone. This panel is terminal — the only way on
+is a real navigation.
+
+
 ### Page composition — a step within a page
 
 When a flow has a second step that depends entirely on data the first step is

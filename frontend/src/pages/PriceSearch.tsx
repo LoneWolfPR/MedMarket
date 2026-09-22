@@ -3,6 +3,7 @@ import { useState, type ReactElement } from 'react'
 import usePrescriptions from '../api/usePrescriptions'
 import { type OrderResponse, type PriceQuote } from '../api/types'
 import Quotes from '../components/Quotes'
+import ConfirmOrder from '../components/ConfirmOrder'
 
 type QuotesStepState = {
   status: 'quotes'
@@ -37,14 +38,34 @@ export default function PriceSearch() {
   } else {
     switch (step.status) {
       case 'quotes':
-        loadState = <Quotes rx={prescription} onSelect={(quote) => {
-          setStep({
-            status: 'confirm',
-            quote
-          })
-        }} />
+        loadState = (
+          <Quotes
+            rx={prescription}
+            onSelect={(quote) => {
+              setStep({
+                status: 'confirm',
+                quote,
+              })
+            }}
+          />
+        )
         break
       case 'confirm':
+        loadState = (
+          <ConfirmOrder
+            rx={prescription}
+            quote={step.quote}
+            onCancel={() => {
+              setStep(defaultState)
+            }}
+            onPlaced={(orderResponse) => {
+              setStep({
+                status: 'placed',
+                orderResponse,
+              })
+            }}
+          />
+        )
         break
       case 'placed':
         break
