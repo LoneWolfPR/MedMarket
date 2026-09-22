@@ -1,9 +1,35 @@
 # MedMarket
 
-A prescription price comparison platform. Users upload a prescription, compare
-real-time prices across multiple pharmacies, place an order, and track shipping
-— orchestrated by durable workflows and built on a hexagonal (ports & adapters)
-architecture.
+> ## ⚠️ Demonstration project — not a real product
+>
+> **MedMarket is a learning and portfolio project. It is not a product, it is
+> not for sale, and it is not intended for production use — now or ever.**
+>
+> It exists to demonstrate **hexagonal (ports & adapters) architecture in a
+> full-stack implementation**, along with durable workflow orchestration,
+> spec-first HTTP, and a realistic deployment pipeline. The prescription-pricing
+> domain is a vehicle for those ideas, chosen because it is rich enough to force
+> interesting design decisions.
+>
+> Concretely, that means:
+>
+> - **No real pharmacies.** Pharmacy and shipping "integrations" are mock
+>   services in `services/`, written to return plausible data.
+> - **No real money.** Stripe runs in test mode only; no live keys, no charges.
+> - **No real prescriptions, and no regulatory compliance.** Nothing here is
+>   HIPAA-compliant, validated, or reviewed for handling protected health
+>   information or dispensing medication. Do not put real patient data into it.
+> - **Not hardened for production.** Security, privacy, availability, and data
+>   retention are all at "demonstrates the pattern" quality, not
+>   "safe to operate" quality.
+>
+> Read it, run it locally, borrow the architecture. Don't deploy it for anyone's
+> actual use.
+
+A simulated prescription price comparison platform. Users upload a prescription,
+compare prices across multiple (mock) pharmacies, place an order, and track
+shipping — orchestrated by durable workflows and built on a hexagonal (ports &
+adapters) architecture.
 
 This repository is a monorepo housing the backend API, the web frontend, mock
 external services, workflow definitions, and deployment configuration.
@@ -24,7 +50,7 @@ external services, workflow definitions, and deployment configuration.
 
 ## Overview
 
-MedMarket lets a user:
+Within the simulation, MedMarket lets a user:
 
 1. **Upload a prescription** — stored as a file with metadata persisted in Postgres.
 2. **Compare prices** — a workflow fans out to multiple pharmacy services
@@ -161,7 +187,10 @@ end-to-end and has prerequisites:
 
 ## Deployment
 
-The application deploys to **Google Kubernetes Engine**. Infrastructure is
+The application deploys to **Google Kubernetes Engine** — as a private staging
+demo, not a service offered to anyone. The deployment exists to show the
+pipeline end to end; it carries no real users, no real data, and no uptime
+commitment (the cluster is parked at zero nodes when idle). Infrastructure is
 managed with Terraform (`terraform/`) and workloads with Kustomize (`k8s/`). A
 step-by-step first-bring-up runbook lives in [`docs/deploy.md`](./docs/deploy.md);
 this section is the model.
